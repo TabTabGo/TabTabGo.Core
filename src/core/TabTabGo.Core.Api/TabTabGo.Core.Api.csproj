@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageVersion>$(VersionSuffix)</PackageVersion>
+    <Title>TabTabGo Core Api</Title>
+    <Description>Reusabe functions and class for any Asp.Net API </Description>
+    <Copyright>TabTabGo</Copyright>
+    <RepositoryUrl>https://github.com/TabTabGo/TabTabGo.Core</RepositoryUrl>
+    <PackageTags>ASP.Net Api core</PackageTags>
+    <PackageReleaseNotes>Migrate from TTG.Core.Api</PackageReleaseNotes>
+    <PackageIcon>logo@32.png</PackageIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\..\assets\logo@32.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+      <Link>logo@32.png</Link>
+    </None>
+  </ItemGroup>
+
+</Project>

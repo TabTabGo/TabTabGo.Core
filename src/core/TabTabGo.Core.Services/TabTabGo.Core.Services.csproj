@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Title>TabTabGo Core Services</Title>
+    <Description>Reusable core services implementation</Description>
+    <Copyright>TabTabGo</Copyright>
+    <PackageIcon>logo@32.png</PackageIcon>
+    <RepositoryUrl>https://github.com/TabTabGo/TabTabGo.Core</RepositoryUrl>
+    <PackageTags>Services Core</PackageTags>
+    <PackageVersion>$(VersionSuffix)</PackageVersion>
+    <LangVersion>10</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TabTabGo.Core.Infrastructure\TabTabGo.Core.Infrastructure.csproj" />
+    <ProjectReference Include="..\TabTabGo.Core\TabTabGo.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="LinqKit.Core" Version="1.2.2" />
+    <PackageReference Include="Microsoft.AspNetCore.OData" Version="8.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="6.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\..\assets\logo@32.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+      <Link>logo@32.png</Link>
+    </None>
+  </ItemGroup>
+
+</Project>
