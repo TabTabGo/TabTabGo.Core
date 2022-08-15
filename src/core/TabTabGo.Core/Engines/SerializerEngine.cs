@@ -216,13 +216,10 @@ public static class SerializerEngine
     /// <param name="dictionary"></param>
     /// <param name="separator">list of separator for property path. default is "_" and "." </param>
     /// <returns>JObject</returns>
-    public static JObject ConvertDictionaryToJson(Dictionary<string, string> dictionary, char[] separator = null)
+    public static JObject ConvertDictionaryToJson(Dictionary<string, string> dictionary, char[]? separator = null)
     {
         var jResult = new JObject();
-        if (separator == null)
-        {
-            separator = new[] { '_', '.' };
-        }
+        separator ??= new[] { '_', '.' };
         foreach (var keyValuePair in dictionary)
         {
             MapToJObject(keyValuePair.Key.Split(separator), jResult, keyValuePair.Value);
@@ -350,19 +347,19 @@ public static class SerializerEngine
     ///     arr1_0_item         arrayval2
     ///     prop2               val2
     /// </example>
-    /// <param name="jobj">dynamic object (json)</param>
+    /// <param name="jObj">dynamic object (json)</param>
     /// <param name="separator">properties path separator. default is "_"</param>
     /// <returns><![CDATA[Dictionary<string,string>]]></returns> 
-    public static Dictionary<string, string> ConvertJsonToDictionary(JObject jobj, string separator = null)
+    public static Dictionary<string, string> ConvertJsonToDictionary(JObject? jObj, string? separator = null)
     {
+        var result = new Dictionary<string, string>();
         if (string.IsNullOrEmpty(separator))
         {
             separator = "_";
         }
 
-        Dictionary<string, string> result = new Dictionary<string, string>();
-
-        foreach (KeyValuePair<string, JToken> kvJson in jobj)
+        if (jObj == null) return result;
+        foreach (KeyValuePair<string, JToken> kvJson in jObj)
         {
             AddKeyValue("", kvJson.Key, kvJson.Value, separator, result);
         }
@@ -370,13 +367,13 @@ public static class SerializerEngine
         return result;
     }
 
-    private static void AddKeyValue(string fullkey, string key, JToken token, string separator, Dictionary<string, string> result)
+    private static void AddKeyValue(string fullKey, string key, JToken token, string separator, Dictionary<string, string> result)
     {
         Type tokenType = token.GetType();
 
         if (tokenType == typeof(JValue))
         {
-            string newKey = fullkey;
+            string newKey = fullKey;
             if (!string.IsNullOrEmpty(newKey))
                 newKey += separator + key;
             else
@@ -386,16 +383,16 @@ public static class SerializerEngine
         }
         else
         {
-            if (string.IsNullOrEmpty(fullkey))
-                fullkey = key;
+            if (string.IsNullOrEmpty(fullKey))
+                fullKey = key;
             else
-                fullkey = fullkey + separator + key;
+                fullKey = fullKey + separator + key;
 
             if (tokenType == typeof(JObject))
             {
                 foreach (KeyValuePair<string, JToken> kvJson in ((JObject)token))
                 {
-                    AddKeyValue(fullkey, kvJson.Key, kvJson.Value, separator, result);
+                    AddKeyValue(fullKey, kvJson.Key, kvJson.Value, separator, result);
                 }
             }
             if (tokenType == typeof(JArray))
@@ -406,10 +403,10 @@ public static class SerializerEngine
                     foreach (KeyValuePair<string, JToken> kvJson in ((JObject)arrToken[index]))
                     {
                         string arrayKey = string.Empty;
-                        if (string.IsNullOrEmpty(fullkey))
+                        if (string.IsNullOrEmpty(fullKey))
                             arrayKey = key + separator + index.ToString();
                         else
-                            arrayKey = fullkey + separator + index.ToString();
+                            arrayKey = fullKey + separator + index.ToString();
 
                         AddKeyValue(arrayKey, kvJson.Key, kvJson.Value, separator, result);
                     }

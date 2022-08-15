@@ -16,7 +16,7 @@ public interface IGenericRepository<TEntity, TKey> : IGenericReadRepository<TEnt
     /// Inserts the specified entity async.
     /// </summary>Value
     /// <param name="entity">The entity.</param>
-    Task<TEntity> InsertAsync(TEntity entity, CancellationToken cancellationToken = default(CancellationToken));
+    Task<TEntity> InsertAsync(TEntity entity, CancellationToken cancellationToken = default);
     /// <summary>
     /// Inserts the specified entity.
     /// </summary>
@@ -32,7 +32,7 @@ public interface IGenericRepository<TEntity, TKey> : IGenericReadRepository<TEnt
     /// Bulk add a huge collection of items async. The method uses transaction scopes to ensure data integrity
     /// </summary>
     /// <param name="items">the collection of items to save</param>
-    Task InsertAsync(IEnumerable<TEntity> items, CancellationToken cancellationToken = default(CancellationToken));
+    Task InsertAsync(IEnumerable<TEntity> items, CancellationToken cancellationToken = default);
     #endregion
 
     #region Delete
@@ -88,20 +88,20 @@ public interface IGenericRepository<TEntity, TKey> : IGenericReadRepository<TEnt
     /// <param name="filter"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task UpdateAsync(JObject entityToUpdate, Expression<Func<TEntity, bool>> filter, CancellationToken cancellationToken = default(CancellationToken));
+    Task UpdateAsync(JObject entityToUpdate, Expression<Func<TEntity, bool>> filter, CancellationToken cancellationToken = default);
     /// <summary>
     /// Update Entity Async
     /// </summary>
     /// <param name="entityToUpdate"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<TEntity> UpdateAsync(TEntity entityToUpdate, CancellationToken cancellationToken = default(CancellationToken));
+    Task<TEntity> UpdateAsync(TEntity entityToUpdate, CancellationToken cancellationToken = default);
     /// <summary>
     /// Update List of entities 
     /// </summary>
     /// <param name="items"></param>
     /// <returns></returns>
-    Task UpdateAsync(IEnumerable<TEntity> items, CancellationToken cancellationToken = default(CancellationToken));
+    Task UpdateAsync(IEnumerable<TEntity> items, CancellationToken cancellationToken = default);
     #endregion
 
     /// <summary>

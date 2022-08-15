@@ -25,7 +25,7 @@ namespace TabTabGo.Data.EF.Repositories
         }
 
         public virtual Task InsertAsync(IEnumerable<TEntity> items,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default)
         {
             return _dbSet.AddRangeAsync(items, cancellationToken);
         }
@@ -36,7 +36,7 @@ namespace TabTabGo.Data.EF.Repositories
         }
 
         public virtual async Task<TEntity> InsertAsync(TEntity entity,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default)
         {
             var result = await _dbSet.AddAsync(entity, cancellationToken);
             return result.Entity;
@@ -52,7 +52,7 @@ namespace TabTabGo.Data.EF.Repositories
         }
 
         public virtual Task UpdateAsync(IEnumerable<TEntity> items,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default)
         {
             return Task.Run(() => _dbSet.UpdateRange(items), cancellationToken);
         }
@@ -77,13 +77,13 @@ namespace TabTabGo.Data.EF.Repositories
         }
 
         public virtual Task UpdateAsync(JObject entityToUpdate, Expression<Func<TEntity, bool>> filter,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default)
         {
             return Task.Run(() => Update(entityToUpdate, filter), cancellationToken);
         }
 
         public virtual Task<TEntity> UpdateAsync(TEntity entityToUpdate,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default)
         {
             return Task.Run(() => Update(entityToUpdate), cancellationToken);
         }

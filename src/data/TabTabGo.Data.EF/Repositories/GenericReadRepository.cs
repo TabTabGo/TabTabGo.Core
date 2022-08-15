@@ -140,7 +140,7 @@ public class GenericReadRepository<TEntity,TKey>: IDisposable, IGenericReadRepos
             , int? rowsToTake = null
             , int? rowsToSkip = null
             , QueryFlags? flags = null
-            , CancellationToken cancellationToken = default(CancellationToken))
+            , CancellationToken cancellationToken = default)
         {
             var query = GetQueryable<TEntity>(
                 selector: e => e
@@ -160,7 +160,7 @@ public class GenericReadRepository<TEntity,TKey>: IDisposable, IGenericReadRepos
             , int? rowsToTake = null
             , int? rowsToSkip = null
             , QueryFlags? flags = null
-            , CancellationToken cancellationToken = default(CancellationToken)) where TResult : class
+            , CancellationToken cancellationToken = default) where TResult : class
         {
             var query = GetQueryable<TResult>(
                 selector: selector
@@ -185,7 +185,7 @@ public class GenericReadRepository<TEntity,TKey>: IDisposable, IGenericReadRepos
         }
 
         public virtual async Task<TEntity?> GetByKeyAsync(object key, string[]? includeProperties = null,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default)
         {
             if (includeProperties == null) return await _dbSet.FindAsync(new object[] { key }, cancellationToken);
             foreach (var property in includeProperties)
@@ -221,7 +221,7 @@ public class GenericReadRepository<TEntity,TKey>: IDisposable, IGenericReadRepos
             , string[] includeProperties = null
             , int? rowsToSkip = null
             , QueryFlags? flags = null
-            , CancellationToken cancellationToken = default(CancellationToken))
+            , CancellationToken cancellationToken = default)
         {
             var query = GetQueryable<TEntity>(
                 selector: e => e
@@ -295,7 +295,7 @@ public class GenericReadRepository<TEntity,TKey>: IDisposable, IGenericReadRepos
         public virtual Task<int> CountAsync(Expression<Func<TEntity, bool>>? filter = null
             , string[]? includes = null
             , QueryFlags? flags = null
-            , CancellationToken cancellationToken = default(CancellationToken))
+            , CancellationToken cancellationToken = default)
         {
             var query = GetQueryable(includes);
             if (flags.HasValue && flags.Value.HasFlag(QueryFlags.IsExpandable))

@@ -8,7 +8,7 @@ public class TTGStopWatch : IDisposable
     private string _currentAction = null;
     private int _copyIndex = 0;
     public string Module { get; set; }
-    public string Format { get; set; }
+    public string? Format { get; set; }
     protected Dictionary<string, TimeSpan> Laps { get; set; } = new Dictionary<string, TimeSpan>();
     public string ReferenceNo { get; set; }
     protected Stopwatch Stopwatch { get; set; }
@@ -17,7 +17,7 @@ public class TTGStopWatch : IDisposable
 
     private readonly ILogger _logger;
 
-    public TTGStopWatch(string module, string formatProvider = null)
+    public TTGStopWatch(string module, string? formatProvider = null)
     {
         this.Module = module;
         this.Stopwatch = new Stopwatch();
@@ -26,7 +26,7 @@ public class TTGStopWatch : IDisposable
 
     }
 
-    public TTGStopWatch(string module, string refNo, string formatProvider = null) : this(module, formatProvider)
+    public TTGStopWatch(string module, string refNo, string? formatProvider = null) : this(module, formatProvider)
     {
         this.ReferenceNo = refNo;
     }

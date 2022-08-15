@@ -3,24 +3,19 @@ using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
 using TabTabGo.Core.Entities;
 using TabTabGo.Core.Extensions;
-using TabTabGo.Core;
 using Microsoft.AspNetCore.JsonPatch;
 using System.Reflection;
-using System.IO;
 using LinqKit;
-using TabTabGo.Core.Services.ViewModels;
 using Microsoft.AspNetCore.JsonPatch.Operations;
 using TabTabGo.Core.Exceptions;
-using TabTabGo.Core.Extensions;
 using TabTabGo.Core.Infrastructure.Data;
 using TabTabGo.Core.ViewModels;
-
 namespace TabTabGo.Core.Services;
 
 public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey>, IBaseService<TEntity, TKey>
     where TEntity : class, IEntity
 {
-    private readonly IUnitOfWork _unitOfWork;
+    protected readonly IUnitOfWork _unitOfWork;
 
     public new IGenericRepository<TEntity, TKey> CurrentRepository =>
         (IGenericRepository<TEntity, TKey>)base.CurrentRepository;
@@ -33,7 +28,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
 
     #region Create Methods
 
-    public void HandleJsonOperator<T>(Operation operation, object affectedObject)
+    public virtual void HandleJsonOperator<T>(Operation operation, object affectedObject)
     {
         throw new NotImplementedException();
     }
@@ -45,7 +40,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     public virtual async Task<TEntity> Create(TEntity entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
         if (!IsValidToCreate(entity, out string errorMessage))
             throw new TTGException($"Failed to create {entity.ToString()}. {errorMessage}.", errorNumber: 2001);
@@ -76,12 +71,12 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     protected virtual async Task PostCreate(TEntity entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
     }
 
     protected virtual async Task PreCreate(TEntity entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
     }
 
@@ -95,7 +90,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="id"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public virtual async Task<TEntity> Delete(TKey id, CancellationToken cancellationToken = default(CancellationToken))
+    public virtual async Task<TEntity> Delete(TKey id, CancellationToken cancellationToken = default)
     {
         await LoadEntityAsync(id, cancellationToken: cancellationToken);
 
@@ -127,22 +122,22 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     protected virtual async Task PostDelete(TEntity entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
     }
 
     protected virtual async Task PreDelete(TEntity entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
     }
 
     protected virtual async Task PostDelete(IEnumerable<TEntity> entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
     }
 
     protected virtual async Task PreDelete(IEnumerable<TEntity> entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
     }
 
@@ -152,21 +147,21 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="id"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public virtual async Task<bool> CanDelete(TKey id, CancellationToken cancellationToken = default(CancellationToken))
+    public virtual async Task<bool> CanDelete(TKey id, CancellationToken cancellationToken = default)
     {
         await LoadEntityAsync(id, cancellationToken);
         return IsValidToDelete(CurrentEntity, out string errorMessage);
     }
 
-    public Task<Stream> ExportFile<TResult>(ExportConfiguration config, object oDataQueryOptions,
+    public virtual Task<Stream> ExportFile<TResult>(ExportConfiguration config, object oDataQueryOptions,
         Expression<Func<TEntity, bool>> fixCriteria = null,
-        string[] includeProperties = null, CancellationToken cancellationToken = default(CancellationToken))
+        string[] includeProperties = null, CancellationToken cancellationToken = default)
         where TResult : class
     {
         throw new NotImplementedException();
     }
 
-    public async Task<bool> CanDelete(IEnumerable<TKey> ids, CancellationToken cancellationToken)
+    public virtual async Task<bool> CanDelete(IEnumerable<TKey> ids, CancellationToken cancellationToken)
     {
         var entities = await CurrentRepository.GetAsync(filter: e => ids.Contains(GetKey(e)),
             cancellationToken: cancellationToken);
@@ -210,7 +205,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     public virtual async Task<TEntity> Update(TKey id, TEntity entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
         var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
         await LoadEntityAsync(id, cancellationToken, includeProperties);
@@ -225,7 +220,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return CurrentEntity;
     }
 
-    public async Task<TEntity> UpdateChanges(TKey id, TEntity entity, CancellationToken cancellationToken)
+    public virtual async Task<TEntity> UpdateChanges(TKey id, TEntity entity, CancellationToken cancellationToken)
     {
         var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
         if(CurrentEntity == null || !GetKeyPredicate(id).Invoke(CurrentEntity))
@@ -249,7 +244,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     public virtual async Task<TEntity> Update(TKey id, JsonPatchDocument<TEntity> entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
         var includeProeprties = GetIncludedProperties(entity, IgnoredProperties);
         await LoadEntityAsync(id, cancellationToken, includeProeprties);
@@ -280,7 +275,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     public virtual async Task<TEntity> Update(TKey id, JObject entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
         var includeProeprties = GetIncludedProperties(entity, IgnoredProperties);
         await LoadEntityAsync(id, cancellationToken, includeProeprties);
@@ -307,22 +302,22 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     }
 
     public virtual async Task PostUpdate(TEntity entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
     }
 
     public virtual async Task PreUpdate(TEntity current, TEntity entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
     }
 
     public virtual async Task PreUpdate(TEntity current, JObject entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
     }
 
     public virtual async Task PreUpdate(TEntity current, JsonPatchDocument<TEntity> entity,
-        CancellationToken cancellationToken = default(CancellationToken))
+        CancellationToken cancellationToken = default)
     {
     }
 

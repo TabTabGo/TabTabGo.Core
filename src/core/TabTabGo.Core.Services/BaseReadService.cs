@@ -18,7 +18,7 @@ namespace TabTabGo.Core.Services;
 public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity, TKey>
     where TEntity : class, IEntity
 {
-    private const int DefaultPageSize = 50;
+    protected const int DefaultPageSize = 50;
     protected virtual IGenericReadRepository<TEntity, TKey> CurrentRepository { get; private set; }
 
     protected TEntity? CurrentEntity { get; set; }
@@ -51,7 +51,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     }
 
     protected virtual async Task LoadEntityAsync(TKey id,
-        CancellationToken cancellationToken = default(CancellationToken), string[] includeProperties = null)
+        CancellationToken cancellationToken = default, string[]? includeProperties = null)
     {
         var predicate = GetKeyPredicate(id);
         var propertiesToInclude = new List<string>(IncludeProperties);
@@ -60,10 +60,11 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
             propertiesToInclude.AddRange(includeProperties);
         }
 
+        propertiesToInclude = propertiesToInclude.Where(p => !p.StartsWith("$")).Distinct().ToList();
         //predicate = null;   //disabled the search by predicate due to bug that needs to be fixed
         if (predicate == null)
         {
-            CurrentEntity = await CurrentRepository.GetByKeyAsync(id, propertiesToInclude.Distinct().ToArray());
+            CurrentEntity = await CurrentRepository.GetByKeyAsync(id, propertiesToInclude.Distinct().ToArray(), cancellationToken);
         }
         else
         {
@@ -78,18 +79,18 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
 
     #region Get entity
 
-    public Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query,
-        CancellationToken cancellationToken = default(CancellationToken))
+    public virtual Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity, bool>> query,
+        CancellationToken cancellationToken = default)
     {
         return CurrentRepository.GetAsync(e => e, query, includeProperties: DetailsProperties,
             flags: QueryFlags.DisableTracking, cancellationToken: cancellationToken);
     }
 
-    public Task<PageList<TEntity>> GetPageList(object oDataQueryOptions,
-        Expression<Func<TEntity, bool>> fixCriteria = null,
+    public virtual Task<PageList<TEntity>> GetPageList(object oDataQueryOptions,
+        Expression<Func<TEntity, bool>>? fixCriteria = null,
         CancellationToken cancellationToken = default)
     {
-        return GetPageList(oDataQueryOptions as ODataQueryOptions, fixCriteria, cancellationToken);
+        return GetPageListODataQuery(oDataQueryOptions as ODataQueryOptions<TEntity>, fixCriteria, cancellationToken);
     }
 
     /// <summary>
@@ -98,14 +99,15 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     /// <param name="query"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public virtual Task<PageList<TEntity>> GetPageList(ODataQueryOptions<TEntity> query,
-        Expression<Func<TEntity?, bool>> fixCriteria = null,
+    public virtual Task<PageList<TEntity>> GetPageListODataQuery(ODataQueryOptions<TEntity>? query,
+        Expression<Func<TEntity, bool>>? fixCriteria = null,
         CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
         {
+            var includeProperties = IncludeProperties.Where(p => !p.StartsWith("$")).ToArray();
             var queryableEntity = GetQueryable(query, out int pageSize, out int skip, out int pageNumber,
-                fixCriteria: fixCriteria, includeProperties: DetailsProperties);
+                fixCriteria: fixCriteria, includeProperties: includeProperties);
             // Get total Count
             var totalCount = queryableEntity.Count();
 
@@ -131,7 +133,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
             //var listResponse = selectExpandUsed ?  : result.Select(MapOut);
             return new PageList<TEntity>(result.ToList(), totalCount, pageSize > 0 ? pageSize : DefaultPageSize,
                 pageNumber);
-        });
+        }, cancellationToken);
     }
 
     /// <summary>
@@ -187,21 +189,21 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
 
     #region Get View Models
 
-    public Task<PageList<object>> GetViewModels(object oDataQueryOptions,
+    public virtual Task<PageList<object>> GetViewModels(object oDataQueryOptions,
         Expression<Func<TEntity, bool>> fixCriteria = null,
         CancellationToken cancellationToken = default)
     {
         return GetViewModels(oDataQueryOptions as ODataQueryOptions, fixCriteria, cancellationToken);
     }
 
-    public Task<PageList<TResult>> GetViewModels<TResult>(object oDataQueryOptions,
+    public virtual Task<PageList<TResult>> GetViewModels<TResult>(object oDataQueryOptions,
         Expression<Func<TEntity, bool>> fixCriteria = null,
         CancellationToken cancellationToken = default) where TResult : class
     {
         return GetViewModels<TResult>(oDataQueryOptions as ODataQueryOptions, fixCriteria, cancellationToken);
     }
 
-    public Task<PageList<TResult>> GetCustomViewModels<TResult>(Func<TEntity, TResult> mapper, object oDataQueryOptions,
+    public virtual Task<PageList<TResult>> GetCustomViewModels<TResult>(Func<TEntity, TResult> mapper, object oDataQueryOptions,
         Expression<Func<TEntity, bool>> fixCriteria = null,
         string[] includeProperties = null, CancellationToken cancellationToken = default)
         where TResult : class
@@ -272,19 +274,19 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     #region OData Helper Functions
 
     public virtual (int pageSize, int skip, int pageNumber, ODataQuerySettings odataSettings) GetOdataProperties(
-        ODataQueryOptions<TEntity> query)
+        ODataQueryOptions<TEntity>? query)
     {
         // Set page settings
         var pageSize = DefaultPageSize;
         var skip = 0;
 
-        if (query.Top != null && int.TryParse(query.Top.RawValue, out int top))
+        if (query?.Top != null && int.TryParse(query.Top.RawValue, out int top))
         {
             if (top != 0)
                 pageSize = top;
         }
 
-        if (query.Skip != null)
+        if (query?.Skip != null)
         {
             skip = query.Skip.Value;
         }
@@ -301,7 +303,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     }
 
     public virtual string[] GetOdataPropertiesExpandProperties(ODataQueryOptions<TEntity> query,
-        string[] includeProperties = null)
+        string[]? includeProperties = null)
     {
         var extendProperties = new List<string>(this.IncludeProperties);
         if (includeProperties != null)
@@ -314,7 +316,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
             extendProperties.AddRange(query.SelectExpand.RawExpand.Split(','));
         }
 
-        return extendProperties.Distinct().ToArray();
+        return extendProperties.Distinct().Where(p => !p.StartsWith("$")).ToArray();
     }
 
     public virtual OrderByQueryOption GetOdataOrderByQueryOption(ODataQueryOptions<TEntity> query)
@@ -517,7 +519,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     /// <param name="pageNumber"></param>
     /// <returns></returns>
     public virtual IQueryable<TEntity?> GetQueryable(ODataQueryOptions<TEntity> query, out int pageSize, out int skip,
-        out int pageNumber, string[] includeProperties = null, Expression<Func<TEntity?, bool>> fixCriteria = null)
+        out int pageNumber, string[] includeProperties = null, Expression<Func<TEntity, bool>>? fixCriteria = null)
     {
         ODataQuerySettings odataSettings;
         (pageSize, skip, pageNumber, odataSettings) = GetOdataProperties(query);
@@ -615,7 +617,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
         return new List<DataColumn>();
     }
 
-    public async Task<Stream> ExportFile<TResult>(ExportConfiguration config, object oDataQueryOptions,
+    public virtual async Task<Stream> ExportFile<TResult>(ExportConfiguration config, object oDataQueryOptions,
         Expression<Func<TEntity, bool>> fixCriteria = null,
         string[] includeProperties = null, CancellationToken cancellationToken = default)
         where TResult : class

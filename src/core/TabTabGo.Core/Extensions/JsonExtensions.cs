@@ -40,7 +40,7 @@ namespace TabTabGo.Core.Extensions
         /// <param name="usePathAsKey">If true make json path into dictionary Key</param>
         /// <param name="separator">The </param>
         /// <returns></returns>
-        public static IDictionary<string, object> ConvertToDictionary(this JObject jsonObject, bool usePathAsKey = false, string separator = null)
+        public static IDictionary<string, object> ConvertToDictionary(this JObject? jsonObject, bool usePathAsKey = false, string? separator = null)
         {
             if (usePathAsKey)
             {

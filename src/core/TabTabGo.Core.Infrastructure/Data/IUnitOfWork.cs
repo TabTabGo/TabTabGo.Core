@@ -10,7 +10,7 @@ public interface IUnitOfWork : IDisposable
     void Commit();
     void Rollback();
     int SaveChanges();
-    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default(CancellationToken));
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     Task<int> SaveChangesInBulkAsync(CancellationToken cancellationToken = default);
     void AddOrUpdateGraph<TEntity>(TEntity entity) where TEntity : class;
     //void UpdateState<TEntity>(TEntity entity, EntityState state);

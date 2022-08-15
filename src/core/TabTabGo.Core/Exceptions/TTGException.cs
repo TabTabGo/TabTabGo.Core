@@ -31,7 +31,7 @@ public class TTGException : Exception
     }
 
 
-    public TTGException(string message, Exception inner = null, LogLevel level = LogLevel.Error, int? errorNumber = null, HttpStatusCode statusCode = HttpStatusCode.InternalServerError, string code = null)
+    public TTGException(string message, Exception? inner = null, LogLevel level = LogLevel.Error, int? errorNumber = null, HttpStatusCode statusCode = HttpStatusCode.InternalServerError, string code = null)
         : base(message, inner)
     {
         if (inner != null)

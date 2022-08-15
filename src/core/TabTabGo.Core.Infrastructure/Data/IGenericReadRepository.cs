@@ -83,7 +83,7 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
         , int? rowsToTake = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null
-        , CancellationToken cancellationToken = default(CancellationToken));
+        , CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the specified filter.
@@ -120,7 +120,7 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
         , int? rowsToTake = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null
-        , CancellationToken cancellationToken = default(CancellationToken)) where TResult : class;
+        , CancellationToken cancellationToken = default) where TResult : class;
     /// <summary>
     /// Get Entitiy by entity key
     /// </summary>
@@ -135,7 +135,7 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <param name="includeProperties"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<TEntity?> GetByKeyAsync(object key, string[] includeProperties = null, CancellationToken cancellationToken = default(CancellationToken));
+    Task<TEntity?> GetByKeyAsync(object key, string[] includeProperties = null, CancellationToken cancellationToken = default);
     #endregion
 
     #region Count Methods
@@ -158,7 +158,7 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     Task<int> CountAsync(Expression<Func<TEntity, bool>> filter = null
         , string[] includes = null
         , QueryFlags? flags = null
-        , CancellationToken cancellationToken = default(CancellationToken));
+        , CancellationToken cancellationToken = default);
     #endregion
 
     #region FirstOrDefault Methods
@@ -192,7 +192,7 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
         , string[] includeProperties = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null
-        , CancellationToken cancellationToken = default(CancellationToken));
+        , CancellationToken cancellationToken = default);
 
     /// <summary>
     /// First or default.
@@ -225,7 +225,7 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
         , string[] includeProperties = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null
-        , CancellationToken cancellationToken = default(CancellationToken)) where TResult : class;
+        , CancellationToken cancellationToken = default) where TResult : class;
 
     #endregion
 
@@ -244,7 +244,7 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <returns>Queryable of type TModel</returns>
     IQueryable<TEntity?> GetQueryable(string[] includeProperties, QueryFlags? flags = null);
 
-    Task<int> ExecuteSqlCommand(string query, IDictionary<string, object> parameters = null, CancellationToken cancellationToken = default(CancellationToken));
+    Task<int> ExecuteSqlCommand(string query, IDictionary<string, object> parameters = null, CancellationToken cancellationToken = default);
     /// <summary>
     /// SQLs the query.
     /// </summary>

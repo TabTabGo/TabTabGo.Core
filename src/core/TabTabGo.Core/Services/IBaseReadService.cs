@@ -29,11 +29,11 @@ public interface IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
 
     #endregion
 
-    Task<bool> Exists(TKey id, CancellationToken cancellationToken = default(CancellationToken));
+    Task<bool> Exists(TKey id, CancellationToken cancellationToken = default);
     Task<Stream> ExportFile<TResult>(ExportConfiguration config,
         object oDataQueryOptions,
         Expression<Func<TEntity, bool>> fixCriteria = null,
         string[] includeProperties = null,
-        CancellationToken cancellationToken = default(CancellationToken)) where TResult : class;
+        CancellationToken cancellationToken = default) where TResult : class;
     
 }
