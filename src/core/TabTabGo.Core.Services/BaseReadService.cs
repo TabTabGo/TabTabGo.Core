@@ -60,7 +60,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
             propertiesToInclude.AddRange(includeProperties);
         }
 
-        propertiesToInclude = propertiesToInclude.Where(p => !p.StartsWith("$")).Distinct().ToList();
+        propertiesToInclude = propertiesToInclude.Where(p => !p.StartsWith("$")).ToList();
         //predicate = null;   //disabled the search by predicate due to bug that needs to be fixed
         if (predicate == null)
         {
@@ -82,7 +82,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     public virtual Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity, bool>> query,
         CancellationToken cancellationToken = default)
     {
-        return CurrentRepository.GetAsync(e => e, query, includeProperties: DetailsProperties,
+        return CurrentRepository.GetAsync(e => e, query, includeProperties: DetailsProperties.Where(p => !p.StartsWith("$")).ToArray(),
             flags: QueryFlags.DisableTracking, cancellationToken: cancellationToken);
     }
 
@@ -153,11 +153,11 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
         {
             propertiesToInclude.AddRange(includeProperties);
         }
-
+        propertiesToInclude = propertiesToInclude.Where(p => !p.StartsWith("$")).ToList();
         TEntity? entity;
         if (predicate == null)
         {
-            entity = await CurrentRepository.GetByKeyAsync(id, propertiesToInclude.Distinct().ToArray());
+            entity = await CurrentRepository.GetByKeyAsync(id, propertiesToInclude.Distinct().ToArray(), cancellationToken);
         }
         else
         {
@@ -226,7 +226,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
         {
             var queryableEntity = GetQueryable(query, out int pageSize, out int skip, out int pageNumber,
                 fixCriteria: fixCriteria,
-                includeProperties: includeProperties != null ? includeProperties : DetailsProperties);
+                includeProperties: includeProperties ?? DetailsProperties.Where(p => !p.StartsWith("$")).ToArray());
 
             CurrentRepository.SetFlags(queryableEntity, QueryFlags.DisableTracking);
             // Get total Count
@@ -261,11 +261,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
         DateTimeOffset? lastUpdatedDate = null, string[]? includeProperties = null, Expression<Func<TEntity, bool>>? fixCriteria = null, CancellationToken cancellationToken = default)
         where TResult : class
     {
-        var entity = await GetByKey(id, lastUpdatedDate,
-            includeProperties != null
-                ? includeProperties.Concat(DetailsProperties).Distinct().ToArray()
-                : DetailsProperties, fixCriteria, cancellationToken);
-
+        var entity = await GetByKey(id, lastUpdatedDate, includeProperties, fixCriteria, cancellationToken);
         return entity != null ? mapper(entity) : null;
     }
 
