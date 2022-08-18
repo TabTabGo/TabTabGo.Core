@@ -59,8 +59,6 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
         {
             propertiesToInclude.AddRange(includeProperties);
         }
-
-        propertiesToInclude = propertiesToInclude.Where(p => !p.StartsWith("$")).ToList();
         //predicate = null;   //disabled the search by predicate due to bug that needs to be fixed
         if (predicate == null)
         {
@@ -82,7 +80,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     public virtual Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity, bool>> query,
         CancellationToken cancellationToken = default)
     {
-        return CurrentRepository.GetAsync(e => e, query, includeProperties: DetailsProperties.Where(p => !p.StartsWith("$")).ToArray(),
+        return CurrentRepository.GetAsync(e => e, query, includeProperties: DetailsProperties,
             flags: QueryFlags.DisableTracking, cancellationToken: cancellationToken);
     }
 
@@ -105,7 +103,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     {
         return Task.Run(() =>
         {
-            var includeProperties = IncludeProperties.Where(p => !p.StartsWith("$")).ToArray();
+            var includeProperties = IncludeProperties;
             var queryableEntity = GetQueryable(query, out int pageSize, out int skip, out int pageNumber,
                 fixCriteria: fixCriteria, includeProperties: includeProperties);
             // Get total Count
@@ -153,7 +151,6 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
         {
             propertiesToInclude.AddRange(includeProperties);
         }
-        propertiesToInclude = propertiesToInclude.Where(p => !p.StartsWith("$")).ToList();
         TEntity? entity;
         if (predicate == null)
         {
@@ -226,7 +223,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
         {
             var queryableEntity = GetQueryable(query, out int pageSize, out int skip, out int pageNumber,
                 fixCriteria: fixCriteria,
-                includeProperties: includeProperties ?? DetailsProperties.Where(p => !p.StartsWith("$")).ToArray());
+                includeProperties: includeProperties ?? DetailsProperties);
 
             CurrentRepository.SetFlags(queryableEntity, QueryFlags.DisableTracking);
             // Get total Count
