@@ -200,7 +200,6 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
 
     #endregion
 
-
     #region Update Methods
 
     /// <summary>

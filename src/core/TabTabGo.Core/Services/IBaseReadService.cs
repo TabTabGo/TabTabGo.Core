@@ -9,7 +9,7 @@ public interface IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
 {
     #region Get Functions
     #region Get Functions
-    Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query, CancellationToken cancellationToken = default);
+    Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query, DateTimeOffset? lastUpdatedDate = null, string[] includeProperties = null, CancellationToken cancellationToken = default);
     /// <summary>
     /// 
     /// </summary>

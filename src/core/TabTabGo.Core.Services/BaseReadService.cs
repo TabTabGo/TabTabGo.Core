@@ -78,11 +78,10 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     #region Get methods
 
     #region Get entity
-
-    public virtual Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity, bool>> query,
+    public Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query, DateTimeOffset? lastUpdatedDate = null, string[] includeProperties = null,
         CancellationToken cancellationToken = default)
     {
-        return CurrentRepository.GetAsync(e => e, query, includeProperties: DetailsProperties,
+       return CurrentRepository.GetAsync(e => e, query, includeProperties: DetailsProperties,
             flags: QueryFlags.DisableTracking, cancellationToken: cancellationToken);
     }
 

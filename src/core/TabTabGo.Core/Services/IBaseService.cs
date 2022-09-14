@@ -16,7 +16,6 @@ public interface IBaseService<TEntity, TKey> :IBaseReadService<TEntity, TKey> wh
 
     Task<TEntity> Create(TEntity entity, CancellationToken cancellationToken = default);
     Task<TEntity> Delete(TKey id, CancellationToken cancellationToken = default);
-   
     Task<bool> CanDelete(TKey id, CancellationToken cancellationToken = default);
     
    
