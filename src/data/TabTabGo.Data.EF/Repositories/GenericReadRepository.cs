@@ -176,7 +176,7 @@ public class GenericReadRepository<TEntity,TKey>: IDisposable, IGenericReadRepos
         public virtual TEntity? GetByKey(object? key, string[]? includeProperties = null)
         {
             if (includeProperties == null) return _dbSet.Find(key);
-            foreach (var property in includeProperties)
+            foreach (var property in includeProperties.Where(p => !p.StartsWith("$")).ToArray())
             {
                 _dbSet.Include(property);
             }
@@ -188,7 +188,7 @@ public class GenericReadRepository<TEntity,TKey>: IDisposable, IGenericReadRepos
             CancellationToken cancellationToken = default)
         {
             if (includeProperties == null) return await _dbSet.FindAsync(new object[] { key }, cancellationToken);
-            foreach (var property in includeProperties)
+            foreach (var property in includeProperties.Where(p => !p.StartsWith("$")).ToArray())
             {
                 _dbSet.Include(property);
             }
@@ -331,7 +331,7 @@ public class GenericReadRepository<TEntity,TKey>: IDisposable, IGenericReadRepos
         public virtual IQueryable<TEntity?> GetQueryable(string[]? includeProperties, QueryFlags? flags = null)
         {
             var queryable = GetQueryable(flags);
-            return IncludeProperties(queryable, includeProperties);
+            return IncludeProperties(queryable, includeProperties?.Where(p => !p.StartsWith("$")).ToArray());
         }
 
         public virtual bool IsModified(TEntity entity, string property)

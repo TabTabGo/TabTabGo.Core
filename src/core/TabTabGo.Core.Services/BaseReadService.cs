@@ -60,11 +60,11 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
             propertiesToInclude.AddRange(includeProperties);
         }
 
-        propertiesToInclude = propertiesToInclude.Where(p => !p.StartsWith("$")).Distinct().ToList();
         //predicate = null;   //disabled the search by predicate due to bug that needs to be fixed
         if (predicate == null)
         {
-            CurrentEntity = await CurrentRepository.GetByKeyAsync(id, propertiesToInclude.Distinct().ToArray(), cancellationToken);
+            CurrentEntity =
+                await CurrentRepository.GetByKeyAsync(id, propertiesToInclude.Distinct().ToArray(), cancellationToken);
         }
         else
         {
@@ -78,11 +78,38 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     #region Get methods
 
     #region Get entity
-    public Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query, DateTimeOffset? lastUpdatedDate = null, string[] includeProperties = null,
-        CancellationToken cancellationToken = default)
+
+    public Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query,
+        string[]? includeProperties = null, CancellationToken cancellationToken = default)
     {
-       return CurrentRepository.GetAsync(e => e, query, includeProperties: DetailsProperties,
-            flags: QueryFlags.DisableTracking, cancellationToken: cancellationToken);
+        var propertiesToInclude = new List<string>(IncludeProperties);
+        if (includeProperties != null)
+        {
+            propertiesToInclude.AddRange(includeProperties);
+        }
+
+        return CurrentRepository.GetAsync(filter: query!, includeProperties: propertiesToInclude.ToArray(),
+            cancellationToken: cancellationToken);
+    }
+
+    public async Task<PageList<TEntity>> GetPageList(Expression<Func<TEntity?, bool>> query,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null, int page = 0, int pageSize = 25,
+        string[]? includeProperties = null, CancellationToken cancellationToken = default)
+    {
+        var propertiesToInclude = new List<string>(IncludeProperties);
+        if (includeProperties != null)
+        {
+            propertiesToInclude.AddRange(includeProperties);
+        }
+
+        var totalCount = await CurrentRepository.CountAsync(query, propertiesToInclude.ToArray(),
+            cancellationToken: cancellationToken);
+        var items = await CurrentRepository.GetAsync(query, orderBy, propertiesToInclude.ToArray(),
+            rowsToTake: pageSize, rowsToSkip: pageSize * pageSize, flags: QueryFlags.DisableTracking,
+            cancellationToken: cancellationToken);
+        //var listResponse = selectExpandUsed ?  : result.Select(MapOut);
+        return new PageList<TEntity>(items.ToList(), totalCount, pageSize > 0 ? pageSize : DefaultPageSize,
+            page + 1);
     }
 
     public virtual Task<PageList<TEntity>> GetPageList(object oDataQueryOptions,
@@ -104,7 +131,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     {
         return Task.Run(() =>
         {
-            var includeProperties = IncludeProperties.Where(p => !p.StartsWith("$")).ToArray();
+            var includeProperties = IncludeProperties;
             var queryableEntity = GetQueryable(query, out int pageSize, out int skip, out int pageNumber,
                 fixCriteria: fixCriteria, includeProperties: includeProperties);
             // Get total Count
@@ -156,7 +183,8 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
         TEntity? entity;
         if (predicate == null)
         {
-            entity = await CurrentRepository.GetByKeyAsync(id, propertiesToInclude.Distinct().ToArray());
+            entity = await CurrentRepository.GetByKeyAsync(id, propertiesToInclude.Distinct().ToArray(),
+                cancellationToken);
         }
         else
         {
@@ -202,7 +230,8 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
         return GetViewModels<TResult>(oDataQueryOptions as ODataQueryOptions, fixCriteria, cancellationToken);
     }
 
-    public virtual Task<PageList<TResult>> GetCustomViewModels<TResult>(Func<TEntity, TResult> mapper, object oDataQueryOptions,
+    public virtual Task<PageList<TResult>> GetCustomViewModels<TResult>(Func<TEntity, TResult> mapper,
+        object oDataQueryOptions,
         Expression<Func<TEntity, bool>> fixCriteria = null,
         string[] includeProperties = null, CancellationToken cancellationToken = default)
         where TResult : class
@@ -225,7 +254,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
         {
             var queryableEntity = GetQueryable(query, out int pageSize, out int skip, out int pageNumber,
                 fixCriteria: fixCriteria,
-                includeProperties: includeProperties != null ? includeProperties : DetailsProperties);
+                includeProperties: includeProperties ?? DetailsProperties);
 
             CurrentRepository.SetFlags(queryableEntity, QueryFlags.DisableTracking);
             // Get total Count
@@ -257,14 +286,11 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     public virtual async Task<TResult?> GetViewModelByKey<TResult>(TKey id, Func<TEntity, TResult> mapper,
-        DateTimeOffset? lastUpdatedDate = null, string[]? includeProperties = null, Expression<Func<TEntity, bool>>? fixCriteria = null, CancellationToken cancellationToken = default)
+        DateTimeOffset? lastUpdatedDate = null, string[]? includeProperties = null,
+        Expression<Func<TEntity, bool>>? fixCriteria = null, CancellationToken cancellationToken = default)
         where TResult : class
     {
-        var entity = await GetByKey(id, lastUpdatedDate,
-            includeProperties != null
-                ? includeProperties.Concat(DetailsProperties).Distinct().ToArray()
-                : DetailsProperties, fixCriteria, cancellationToken);
-
+        var entity = await GetByKey(id, lastUpdatedDate, includeProperties, fixCriteria, cancellationToken);
         return entity != null ? mapper(entity) : null;
     }
 
@@ -591,7 +617,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
 
     public virtual async Task<DataTable> GetViewModelsDataTable<TResult>(
         ODataQueryOptions<TEntity> query,
-        Func<TEntity,TResult> mapper,
+        Func<TEntity, TResult> mapper,
         Expression<Func<TEntity?, bool>> fixCriteria = null,
         string[] includeProperties = null,
         IList<DataColumn> columns = null,
