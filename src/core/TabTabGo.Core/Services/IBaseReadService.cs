@@ -9,7 +9,35 @@ public interface IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
 {
     #region Get Functions
     #region Get Functions
-    Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get List of Entities based on query
+    /// </summary>
+    /// <param name="query">filter query</param>
+
+    /// <param name="lastUpdatedDate"></param>
+    /// <param name="includeProperties"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query, string[]? includeProperties = null,
+        CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Get Page list of Entities based on query
+    /// </summary>
+    /// <param name="query"></param>
+    /// <param name="orderBy">Order by query</param>
+    /// <param name="page">0 index page</param>
+    /// <param name="pageSize">number of item to return</param>
+    /// <param name="includeProperties"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    Task<PageList<TEntity>> GetPageList(Expression<Func<TEntity?, bool>> query,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
+        int page = 0, int pageSize = 25,
+        string[]? includeProperties = null,
+        CancellationToken cancellationToken = default);
+    
     /// <summary>
     /// 
     /// </summary>
