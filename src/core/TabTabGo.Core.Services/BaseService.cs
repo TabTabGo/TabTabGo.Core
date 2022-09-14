@@ -20,8 +20,14 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     public new IGenericRepository<TEntity, TKey> CurrentRepository =>
         (IGenericRepository<TEntity, TKey>)base.CurrentRepository;
 
-    public BaseService(IUnitOfWork unitOfWork, IGenericRepository<TEntity?, TKey> repository,
+    public BaseService(IUnitOfWork unitOfWork, IGenericRepository<TEntity, TKey> repository,
         ILogger<BaseService<TEntity, TKey>> logger) : base(repository, logger)
+    {
+        _unitOfWork = unitOfWork;
+    }
+    
+    public BaseService(IUnitOfWork unitOfWork,
+        ILogger<BaseService<TEntity, TKey>> logger) : base(unitOfWork.Repository<TEntity,TKey>(), logger)
     {
         _unitOfWork = unitOfWork;
     }

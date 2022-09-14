@@ -14,7 +14,7 @@ public class UnitOfWork : IUnitOfWork
 {
     protected readonly DbContext _context;
     protected readonly ILogger _logger;
-    private readonly ConcurrentDictionary<string, object> _repositories = new ConcurrentDictionary<string, object>();
+    protected readonly ConcurrentDictionary<string, object> _repositories = new ConcurrentDictionary<string, object>();
     public UnitOfWork(DbContext context, ILogger<UnitOfWork> logger)
     {
         _context = context;
@@ -56,9 +56,9 @@ public class UnitOfWork : IUnitOfWork
         throw new NotImplementedException();
     }
 
-    public virtual IGenericRepository<TEntity, TKey> Repository<TEntity, TKey>(string name) where TEntity : class
+    public virtual IGenericRepository<TEntity, TKey> Repository<TEntity, TKey>(string? name= null) where TEntity : class
     {
-        var entityName = string.IsNullOrEmpty(name) ? nameof(TEntity) : name;
+        var entityName = string.IsNullOrEmpty(name) ? typeof(TEntity).FullName : name;
         if(_repositories.TryGetValue(entityName, out var repository))
         {
             return (IGenericRepository<TEntity, TKey>)repository;

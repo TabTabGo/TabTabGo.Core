@@ -5,7 +5,7 @@ namespace TabTabGo.Core.Infrastructure.Data;
 
 public interface IUnitOfWork : IDisposable
 {
-    IGenericRepository<TEntity, TKey> Repository<TEntity, TKey>(string name) where TEntity : class;
+    IGenericRepository<TEntity, TKey> Repository<TEntity, TKey>(string? name = null) where TEntity : class;
     void BeginTransaction(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted);
     void Commit();
     void Rollback();
