@@ -351,6 +351,7 @@ public class GenericReadRepository<TEntity,TKey>: IDisposable, IGenericReadRepos
         {
             if (includeProperties != null)
             {
+                includeProperties = includeProperties.Where(p => !p.StartsWith("$")).ToArray();
                 queryable = includeProperties.Aggregate(queryable, (current, includeProperty) => current.Include(includeProperty));
             }
 
