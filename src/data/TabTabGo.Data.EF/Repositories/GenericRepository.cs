@@ -10,11 +10,11 @@ namespace TabTabGo.Data.EF.Repositories
     /// 
     /// </summary>
     /// <typeparam name="TEntity">The type of the entity.</typeparam>
-    public class GenericRepository<TEntity, TKey> : GenericReadRepository<TEntity,TKey>, IDisposable, IGenericRepository<TEntity,TKey> where TEntity : class
+    public class GenericRepository<TEntity, TKey> : GenericReadRepository<TEntity, TKey>, IDisposable,
+        IGenericRepository<TEntity, TKey> where TEntity : class
     {
-      public GenericRepository(DbContext dbContext) : base(dbContext)
+        public GenericRepository(DbContext dbContext) : base(dbContext)
         {
-        
         }
 
         #region Insert
@@ -117,10 +117,5 @@ namespace TabTabGo.Data.EF.Repositories
         }
 
         #endregion
-    
-
     }
-
 }
-
-
