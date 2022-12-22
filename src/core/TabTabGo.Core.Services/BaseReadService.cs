@@ -79,7 +79,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
 
     #region Get entity
 
-    public Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query,
+    public virtual Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query,
         string[]? includeProperties = null, CancellationToken cancellationToken = default)
     {
         var propertiesToInclude = new List<string>(IncludeProperties);
@@ -92,7 +92,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
             cancellationToken: cancellationToken);
     }
 
-    public async Task<PageList<TEntity>> GetPageList(Expression<Func<TEntity?, bool>> query,
+    public virtual  Task<PageList<TEntity>> GetPageList(Expression<Func<TEntity?, bool>> query,
         Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null, int page = 0, int pageSize = 25,
         string[]? includeProperties = null, CancellationToken cancellationToken = default)
     {
@@ -102,14 +102,8 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
             propertiesToInclude.AddRange(includeProperties);
         }
 
-        var totalCount = await CurrentRepository.CountAsync(query, propertiesToInclude.ToArray(),
-            cancellationToken: cancellationToken);
-        var items = await CurrentRepository.GetAsync(query, orderBy, propertiesToInclude.ToArray(),
-            rowsToTake: pageSize, rowsToSkip: pageSize * pageSize, flags: QueryFlags.DisableTracking,
-            cancellationToken: cancellationToken);
-        //var listResponse = selectExpandUsed ?  : result.Select(MapOut);
-        return new PageList<TEntity>(items.ToList(), totalCount, pageSize > 0 ? pageSize : DefaultPageSize,
-            page + 1);
+        return CurrentRepository.GetPageListAsync(x => x, query, page, pageSize, orderBy,
+            propertiesToInclude?.ToArray(), cancellationToken);
     }
 
     public virtual Task<PageList<TEntity>> GetPageList(object oDataQueryOptions,
