@@ -5,7 +5,7 @@
     {
         public int PageNumber { get; }
         public int TotalItems { get;  }
-        public int TotalPages => PageSize.HasValue && PageSize.Value > 0 ? (int) Math.Floor((decimal)TotalItems / PageSize.Value) + 1 : 1;
+        public int TotalPages => PageSize is > 0 ? (int) Math.Ceiling((decimal)TotalItems / PageSize.Value) : 1;
         public int? PageSize { get;  }
         public int Count  => Items != null ? Items.Count : 0;
 
