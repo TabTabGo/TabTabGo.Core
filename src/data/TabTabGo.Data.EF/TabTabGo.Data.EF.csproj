@@ -12,7 +12,6 @@
         <PackageProjectUrl>https://github.com/TabTabGo/TabTabGo.Core</PackageProjectUrl>
         <PackageVersion>$(VersionSuffix)</PackageVersion>
         <PackageIcon>logo@32.png</PackageIcon>
-        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     </PropertyGroup>
 
     <ItemGroup>

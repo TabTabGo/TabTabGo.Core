@@ -18,9 +18,6 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TabTabGo.Core.Test", "test\TabTabGo.Core.Test\TabTabGo.Core.Test.csproj", "{A1269343-A93A-4F6B-856F-EA91A311262A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{6777F3EB-7E9F-4884-9A35-AFAFF0F76923}"
-	ProjectSection(SolutionItems) = preProject
-		tools\PackagAndPush.sh = tools\PackagAndPush.sh
-	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "core", "core", "{637C627C-1D22-4C7D-AD92-EB8A6F7F3DFE}"
 EndProject

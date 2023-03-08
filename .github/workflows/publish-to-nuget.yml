@@ -1,0 +1,52 @@
+name: Publish to NuGet
+on:
+  push:
+    tags:
+      - 'v*' # only publish on tag with semantic versioning
+
+jobs:
+  build-and-publish-TabTabGo-core:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Publish TabTabGo.Core to NuGet
+        uses: tabtabgo/publish-to-nuget-action@v1.6
+        with:
+          project_path: 'src/core/TabTabGo.Core/TabTabGo.Core.csproj'
+          package_version: ${GITHUB_REF#refs/*/v}
+          package_name: 'TabTabGo.Core'
+          nuget_api_key: ${{ secrets.NUGET_API_KEY }}
+  
+      - name: Publish TabTabGo.Core.Services to NuGet
+        uses: tabtabgo/publish-to-nuget-action@v1.6
+        with:
+          project_path: 'src/core/TabTabGo.Core.Services/TabTabGo.Core.Services.csproj'
+          package_version: ${GITHUB_REF#refs/*/v}
+          package_name: 'TabTabGo.Core.Services'
+          nuget_api_key: ${{ secrets.NUGET_API_KEY }}
+  
+      - name: Publish TabTabGo.Core.Infrastructure to NuGet
+        uses: tabtabgo/publish-to-nuget-action@v1.6
+        with:
+          project_path: 'src/TabTabGo.Core.Infrastructure/TabTabGo.Core.Infrastructure.csproj'
+          package_version: ${GITHUB_REF#refs/*/v}
+          package_name: 'TabTabGo.Core.Infrastructure'
+          nuget_api_key: ${{ secrets.NUGET_API_KEY }}
+          
+      - name: Publish TabTabGo.Core.Api to NuGet
+        uses: tabtabgo/publish-to-nuget-action@v1.6
+        with:
+          project_path: 'src/core/TabTabGo.Core.Api/TabTabGo.Core.Api.csproj'
+          package_version: ${GITHUB_REF#refs/*/v}
+          package_name: 'TabTabGo.Core.Api'
+          nuget_api_key: ${{ secrets.NUGET_API_KEY }}
+  
+      - name: Publish TabTabGo.Data.EF to NuGet
+        uses: tabtabgo/publish-to-nuget-action@v1.6
+        with:
+          project_path: 'src/data/TabTabGo.Data.EF/TabTabGo.Data.EF.csproj'
+          package_version: ${GITHUB_REF#refs/*/v}
+          package_name: 'TabTabGo.Data.EF'
+          nuget_api_key: ${{ secrets.NUGET_API_KEY }}
+  

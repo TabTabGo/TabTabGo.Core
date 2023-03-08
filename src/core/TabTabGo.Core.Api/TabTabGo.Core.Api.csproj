@@ -4,7 +4,6 @@
     <TargetFramework>net6.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageVersion>$(VersionSuffix)</PackageVersion>
     <Title>TabTabGo Core Api</Title>
     <Description>Reusabe functions and class for any Asp.Net API </Description>
