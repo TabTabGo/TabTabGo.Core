@@ -30,6 +30,21 @@
             PageNumber = pageNumber;
             PageSize = pageSize;
         }
+        
+        public static  PageList<TResult> Create(IQueryable<TResult> source, int pageNumber, int pageSize)
+        {
+            var count =  source.Count();
+            var items =  source.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+            return new PageList<TResult>(items, count, pageSize, pageNumber);
+        }
+        
+        public static PageList<TMappedResult> Create<TMappedResult>(IQueryable<TResult> source, int pageNumber, int pageSize, Func<TResult, TMappedResult> mapper) 
+            where TMappedResult : class
+        {
+            var count =  source.Count();
+            var items =  source.Skip((pageNumber - 1) * pageSize).Take(pageSize).Select(x => mapper(x)).ToList();
+            return new PageList<TMappedResult>(items, count, pageSize, pageNumber);
+        }
 
     }
 }
