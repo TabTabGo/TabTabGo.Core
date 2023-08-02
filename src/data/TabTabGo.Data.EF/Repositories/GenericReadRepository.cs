@@ -27,9 +27,10 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
         Expression<Func<TEntity?, bool>> filter = null, int pageNumber = 0,
         int pageSize = 20, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null,
         string[] includeProperties = null,
+        QueryFlags? flags = null,
         CancellationToken cancellationToken = new CancellationToken()) where TResult : class
     {
-        var query = GetQueryable(includeProperties, QueryFlags.DisableTracking);
+        var query = GetQueryable(includeProperties, QueryFlags.DisableTracking | flags);
 
         if (filter != null)
         {

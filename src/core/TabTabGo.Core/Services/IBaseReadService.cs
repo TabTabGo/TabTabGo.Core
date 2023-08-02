@@ -1,4 +1,5 @@
 ﻿using System.Linq.Expressions;
+using TabTabGo.Core.Enums;
 using TabTabGo.Core.Models;
 using TabTabGo.Core.Services.ViewModels;
 using TabTabGo.Core.ViewModels;
@@ -14,12 +15,12 @@ public interface IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
     /// Get List of Entities based on query
     /// </summary>
     /// <param name="query">filter query</param>
-
-    /// <param name="lastUpdatedDate"></param>
     /// <param name="includeProperties"></param>
+    /// <param name="flags"></para>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query, string[]? includeProperties = null,
+    Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query, string[]? includeProperties = null, 
+        QueryFlags? flags = null,
         CancellationToken cancellationToken = default);
     
     /// <summary>
@@ -36,16 +37,22 @@ public interface IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
         Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
         int page = 0, int pageSize = 25,
         string[]? includeProperties = null,
+        QueryFlags? flags = null,
         CancellationToken cancellationToken = default);
-    
+
     /// <summary>
     /// 
     /// </summary>
     /// <param name="oDataQueryOptions">ODataQueryOptions object</param>
     /// <param name="fixCriteria"></param>
+    /// <param name="includeProperties"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<PageList<TEntity>> GetPageList(object oDataQueryOptions, Expression<Func<TEntity, bool>> fixCriteria = null, CancellationToken cancellationToken = default);
+    Task<PageList<TEntity>> GetPageList(object oDataQueryOptions, 
+        Expression<Func<TEntity, bool>> fixCriteria = null, 
+        string[]? includeProperties = null, 
+        QueryFlags? flags = null,
+        CancellationToken cancellationToken = default);
     Task<TEntity?> GetByKey(TKey id, DateTimeOffset? lastUpdatedDate = null, string[] includeProperties = null, Expression<Func<TEntity, bool>> fixCriteria = null, CancellationToken cancellationToken = default);
     #endregion
     

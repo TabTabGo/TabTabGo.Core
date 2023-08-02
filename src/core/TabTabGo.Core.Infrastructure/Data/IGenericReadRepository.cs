@@ -29,6 +29,7 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
         int pageSize = 20, 
         Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null,
         string[] includeProperties = null,
+        QueryFlags? flags = null,
         CancellationToken cancellationToken = default) where TResult : class;
 
     // <summary>

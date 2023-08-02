@@ -80,7 +80,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     #region Get entity
 
     public virtual Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query,
-        string[]? includeProperties = null, CancellationToken cancellationToken = default)
+        string[]? includeProperties = null, QueryFlags? flags = null, CancellationToken cancellationToken = default)
     {
         var propertiesToInclude = new List<string>(IncludeProperties);
         if (includeProperties != null)
@@ -88,13 +88,13 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
             propertiesToInclude.AddRange(includeProperties);
         }
 
-        return CurrentRepository.GetAsync(filter: query!, includeProperties: propertiesToInclude.ToArray(),
+        return CurrentRepository.GetAsync(filter: query!, includeProperties: propertiesToInclude.ToArray(),flags: flags,
             cancellationToken: cancellationToken);
     }
 
     public virtual  Task<PageList<TEntity>> GetPageList(Expression<Func<TEntity?, bool>> query,
         Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null, int page = 0, int pageSize = 25,
-        string[]? includeProperties = null, CancellationToken cancellationToken = default)
+        string[]? includeProperties = null, QueryFlags? flags = null, CancellationToken cancellationToken = default)
     {
         var propertiesToInclude = new List<string>(IncludeProperties);
         if (includeProperties != null)
@@ -103,14 +103,16 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
         }
 
         return CurrentRepository.GetPageListAsync(x => x, query, page, pageSize, orderBy,
-            propertiesToInclude?.ToArray(), cancellationToken);
+            propertiesToInclude?.ToArray(), flags, cancellationToken);
     }
 
     public virtual Task<PageList<TEntity>> GetPageList(object oDataQueryOptions,
-        Expression<Func<TEntity, bool>>? fixCriteria = null,
+        Expression<Func<TEntity, bool>> fixCriteria = null,
+        string[]? includeProperties = null,
+        QueryFlags? flags = null,
         CancellationToken cancellationToken = default)
     {
-        return GetPageListODataQuery(oDataQueryOptions as ODataQueryOptions<TEntity>, fixCriteria, cancellationToken);
+        return GetPageListODataQuery(oDataQueryOptions as ODataQueryOptions<TEntity>, fixCriteria,  includeProperties, flags, cancellationToken);
     }
 
     /// <summary>
@@ -121,13 +123,15 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     /// <returns></returns>
     public virtual Task<PageList<TEntity>> GetPageListODataQuery(ODataQueryOptions<TEntity>? query,
         Expression<Func<TEntity, bool>>? fixCriteria = null,
+        string[]? includeProperties = null,
+        QueryFlags? flags = null,
         CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
         {
             var includeProperties = IncludeProperties;
             var queryableEntity = GetQueryable(query, out int pageSize, out int skip, out int pageNumber,
-                fixCriteria: fixCriteria, includeProperties: includeProperties);
+                fixCriteria: fixCriteria, includeProperties: includeProperties, flags: flags);
             // Get total Count
             var totalCount = queryableEntity.Count();
 
@@ -538,14 +542,14 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     /// <param name="pageNumber"></param>
     /// <returns></returns>
     public virtual IQueryable<TEntity?> GetQueryable(ODataQueryOptions<TEntity> query, out int pageSize, out int skip,
-        out int pageNumber, string[] includeProperties = null, Expression<Func<TEntity, bool>>? fixCriteria = null)
+        out int pageNumber, string[] includeProperties = null, Expression<Func<TEntity, bool>>? fixCriteria = null, QueryFlags? flags = null)
     {
         ODataQuerySettings odataSettings;
         (pageSize, skip, pageNumber, odataSettings) = GetOdataProperties(query);
 
         //Get the expanded properties
         var extendProperties = GetOdataPropertiesExpandProperties(query, includeProperties);
-        var queryableEntity = CurrentRepository.GetQueryable(extendProperties, QueryFlags.DisableTracking);
+        var queryableEntity = CurrentRepository.GetQueryable(extendProperties, QueryFlags.DisableTracking | flags);
         var populatedQuery = PopulateFilter(query);
         if (populatedQuery.CustomFilter != null)
         {
@@ -554,7 +558,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
 
         if (queryableEntity == null)
         {
-            queryableEntity = CurrentRepository.GetQueryable(extendProperties, QueryFlags.DisableTracking);
+            queryableEntity = CurrentRepository.GetQueryable(extendProperties, QueryFlags.DisableTracking | flags);
         }
 
         //Apply filter
