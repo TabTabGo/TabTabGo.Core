@@ -1,4 +1,4 @@
-# .NET 8 Core Library
+# .NET Core Library
 
 ## Overview
 This .NET 8 Core Library is designed as a foundational framework that provides essential, reusable functionalities for various .NET projects. It encapsulates abstract implementations of CRUD operations, streamlining development processes across diverse applications.
