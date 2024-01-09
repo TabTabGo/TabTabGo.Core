@@ -10,11 +10,11 @@ namespace TabTabGo.Core.Country.Services
 {
     public class CountryService : ICountryService
     {
-        private readonly IStringLocalizer _localization;
+        private readonly IStringLocalizer _stringLocalizer;
 
-        public CountryService(IStringLocalizer localization)
+        public CountryService(IStringLocalizer stringLocalizer)
         {
-            _localization = localization;
+            _stringLocalizer = stringLocalizer;
         }
 
         public async Task<string> GetCountryName(string code, string culture = "en")
@@ -27,7 +27,7 @@ namespace TabTabGo.Core.Country.Services
             RegionInfo region = new RegionInfo(code);
             string countryName = region.EnglishName;
             if(culture != "en")
-                countryName = _localization.GetString(countryName, culture);
+                countryName = _stringLocalizer.GetString(countryName, culture);
             return countryName;
         }
     }
