@@ -10,7 +10,7 @@ using System.Globalization;
 using System.Text;
 using File = System.IO.File;
 
-namespace TabTabGo.Core.Country.Services;
+namespace TabTabGo.Core.Services;
 
 public class JsonStringLocalizer : IStringLocalizer
 {
@@ -45,7 +45,7 @@ public class JsonStringLocalizer : IStringLocalizer
         throw new NotImplementedException();
     }
 
-    private string GetString(string key, string culture = "ar")
+    private string GetString(string key, string culture = "en")
     {
         var cultureInfo = GetCultureInfo(culture);
 
@@ -87,10 +87,12 @@ public class JsonStringLocalizer : IStringLocalizer
             return result;
         }
     }
-    private CultureInfo GetCultureInfo(string culture = "ar")
+    private CultureInfo GetCultureInfo(string culture = "en")
     {
         switch (culture.ToLower())
         {
+            case "en":
+                return new CultureInfo("en-US");
             case "ar":
                 return new CultureInfo("ar-AE");
             default:

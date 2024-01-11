@@ -1,5 +1,7 @@
 ﻿using TabTabGo.Core.Country;
 using TabTabGo.Core.Country.Services;
+using TabTabGo.Core.Models;
+using TabTabGo.Core.Services;
 
 namespace TabTabGo.Core.Test.Services;
 
@@ -15,17 +17,35 @@ public class CountryServiceTests
         _countryService = factory.GetRequiredService<ICountryService>();
     }
     [Fact]
-    public async void TestEnglishName()
+    public async void TestEnglishNameByAlpha2()
     {
         var code = "AE";
-        var name = await _countryService.GetCountryName(code);
-        Assert.Equal("United Arab Emirates", name);
+        var country = await _countryService.GetCountryName(code);
+        Assert.Equal("United Arab Emirates", country.Name);
+        Assert.Equal("784", country.Number);
     }
     [Fact]
-    public async void TestArabicName()
+    public async void TestArabicNameByAlpha2()
     {
         var code = "AE";
-        var name = await _countryService.GetCountryName(code , "ar");
-        Assert.Equal("الامارات العربية المتحدة", name);
+        var country = await _countryService.GetCountryName(code , "ar");
+        Assert.Equal("الإمارات العربية المتحدة", country.Name);
+        Assert.Equal("784", country.Number);
+    }
+    [Fact]
+    public async void TestEnglishNameByAlpha3()
+    {
+        var code = "ARE";
+        var country = await _countryService.GetCountryName(code);
+        Assert.Equal("United Arab Emirates", country.Name);
+        Assert.Equal("784", country.Number);
+    }
+    [Fact]
+    public async void TestArabicNameByAlpha3()
+    {
+        var code = "ARE";
+        var country = await _countryService.GetCountryName(code, "ar");
+        Assert.Equal("الإمارات العربية المتحدة", country.Name);
+        Assert.Equal("784", country.Number);
     }
 }

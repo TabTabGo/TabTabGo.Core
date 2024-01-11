@@ -4,10 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TabTabGo.Core.Country.Services
+namespace TabTabGo.Core.Services
 {
     public interface ICountryService
     {
-        Task<string> GetCountryName(string code, string culture = "en");
+        Task<Models.Country> GetCountryName(string code, string culture = "en", CancellationToken cancellationToken = default);
     }
 }
