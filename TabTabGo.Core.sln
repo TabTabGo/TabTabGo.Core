@@ -1,21 +1,21 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.30114.105
+# Visual Studio Version 17
+VisualStudioVersion = 17.7.34009.444
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{27127C42-173C-4FDD-83DB-03AF906B1211}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TabTabGo.Core", "src\core\TabTabGo.Core\TabTabGo.Core.csproj", "{263114D8-C6EC-4055-BCBC-8D82B99A4C9D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TabTabGo.Core", "src\core\TabTabGo.Core\TabTabGo.Core.csproj", "{263114D8-C6EC-4055-BCBC-8D82B99A4C9D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TabTabGo.Core.Api", "src\core\TabTabGo.Core.Api\TabTabGo.Core.Api.csproj", "{39C64042-16BA-429A-9E14-0738220EA1D0}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TabTabGo.Core.Api", "src\core\TabTabGo.Core.Api\TabTabGo.Core.Api.csproj", "{39C64042-16BA-429A-9E14-0738220EA1D0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TabTabGo.Core.Infrastructure", "src\core\TabTabGo.Core.Infrastructure\TabTabGo.Core.Infrastructure.csproj", "{A5B2D7B1-0C35-45DD-A084-FD18EF6AB436}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TabTabGo.Core.Infrastructure", "src\core\TabTabGo.Core.Infrastructure\TabTabGo.Core.Infrastructure.csproj", "{A5B2D7B1-0C35-45DD-A084-FD18EF6AB436}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TabTabGo.Core.Services", "src\core\TabTabGo.Core.Services\TabTabGo.Core.Services.csproj", "{3D915BD3-F132-4FC6-8F92-49866B45AF86}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TabTabGo.Core.Services", "src\core\TabTabGo.Core.Services\TabTabGo.Core.Services.csproj", "{3D915BD3-F132-4FC6-8F92-49866B45AF86}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{263CC5A6-A9BD-474E-9E66-55BCEDC45CD4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TabTabGo.Core.Test", "test\TabTabGo.Core.Test\TabTabGo.Core.Test.csproj", "{A1269343-A93A-4F6B-856F-EA91A311262A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TabTabGo.Core.Test", "test\TabTabGo.Core.Test\TabTabGo.Core.Test.csproj", "{A1269343-A93A-4F6B-856F-EA91A311262A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{6777F3EB-7E9F-4884-9A35-AFAFF0F76923}"
 EndProject
@@ -23,22 +23,21 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "core", "core", "{637C627C-1
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "data", "data", "{4F45035E-5850-42D7-A586-FC67B923AF5E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TTG.Data", "src\data\TTG.Data\TTG.Data.csproj", "{0AB0F6BE-693C-49F5-A0F1-B95522D7D17E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TTG.Data", "src\data\TTG.Data\TTG.Data.csproj", "{0AB0F6BE-693C-49F5-A0F1-B95522D7D17E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TabTabGo.Data.EF", "src\data\TabTabGo.Data.EF\TabTabGo.Data.EF.csproj", "{FCA7475B-782D-4968-A4D1-3B398E3DBCB2}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TabTabGo.Data.EF", "src\data\TabTabGo.Data.EF\TabTabGo.Data.EF.csproj", "{FCA7475B-782D-4968-A4D1-3B398E3DBCB2}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "assets", "assets", "{E696B70C-33A7-46F6-8688-C0B2E27A4997}"
 	ProjectSection(SolutionItems) = preProject
 		assets\logo@32.png = assets\logo@32.png
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TabTabGo.Core.Country", "TabTabGo.Core.Country\TabTabGo.Core.Country.csproj", "{A2773BB4-54DD-4F0D-8E87-8B536E517D3B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{263114D8-C6EC-4055-BCBC-8D82B99A4C9D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -69,16 +68,27 @@ Global
 		{FCA7475B-782D-4968-A4D1-3B398E3DBCB2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FCA7475B-782D-4968-A4D1-3B398E3DBCB2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FCA7475B-782D-4968-A4D1-3B398E3DBCB2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A2773BB4-54DD-4F0D-8E87-8B536E517D3B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A2773BB4-54DD-4F0D-8E87-8B536E517D3B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A2773BB4-54DD-4F0D-8E87-8B536E517D3B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A2773BB4-54DD-4F0D-8E87-8B536E517D3B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{A1269343-A93A-4F6B-856F-EA91A311262A} = {263CC5A6-A9BD-474E-9E66-55BCEDC45CD4}
-		{637C627C-1D22-4C7D-AD92-EB8A6F7F3DFE} = {27127C42-173C-4FDD-83DB-03AF906B1211}
 		{263114D8-C6EC-4055-BCBC-8D82B99A4C9D} = {637C627C-1D22-4C7D-AD92-EB8A6F7F3DFE}
 		{39C64042-16BA-429A-9E14-0738220EA1D0} = {637C627C-1D22-4C7D-AD92-EB8A6F7F3DFE}
 		{A5B2D7B1-0C35-45DD-A084-FD18EF6AB436} = {637C627C-1D22-4C7D-AD92-EB8A6F7F3DFE}
 		{3D915BD3-F132-4FC6-8F92-49866B45AF86} = {637C627C-1D22-4C7D-AD92-EB8A6F7F3DFE}
+		{A1269343-A93A-4F6B-856F-EA91A311262A} = {263CC5A6-A9BD-474E-9E66-55BCEDC45CD4}
+		{637C627C-1D22-4C7D-AD92-EB8A6F7F3DFE} = {27127C42-173C-4FDD-83DB-03AF906B1211}
 		{4F45035E-5850-42D7-A586-FC67B923AF5E} = {27127C42-173C-4FDD-83DB-03AF906B1211}
 		{0AB0F6BE-693C-49F5-A0F1-B95522D7D17E} = {4F45035E-5850-42D7-A586-FC67B923AF5E}
 		{FCA7475B-782D-4968-A4D1-3B398E3DBCB2} = {4F45035E-5850-42D7-A586-FC67B923AF5E}
+		{A2773BB4-54DD-4F0D-8E87-8B536E517D3B} = {637C627C-1D22-4C7D-AD92-EB8A6F7F3DFE}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {12AF5B21-1918-4609-80E9-864CE467290D}
 	EndGlobalSection
 EndGlobal
