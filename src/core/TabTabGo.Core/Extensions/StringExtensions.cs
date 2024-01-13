@@ -12,19 +12,19 @@ public static class StringExtensions
         }
     }
     
-    public static JObject DeserializeToJson(this string json)
+    public static JsonObject? DeserializeToJson(this string json)
     {
-        return JObject.Parse(json);
+        return JsonNode.Parse(json) as JsonObject;
     }
 
-    public static JArray DeserializeToJArray(this string json)
+    public static JsonArray? DeserializeToJArray(this string json)
     {
-        return JArray.Parse(json);
+        return JsonNode.Parse(json) as JsonArray;
     }
 
     public static T? Deserialize<T>(this string serializedObj)
     {
-        return JsonConvert.DeserializeObject<T>(serializedObj, JsonExtensions.JsonOptions);
+        return JsonSerializer.Deserialize<T>(serializedObj, JsonExtensions.JsonOptions);
     }
 }
 

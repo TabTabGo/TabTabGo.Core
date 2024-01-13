@@ -1,10 +1,11 @@
-﻿using Newtonsoft.Json.Linq;
+﻿using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
 using TabTabGo.Core.Entities;
 using TabTabGo.Core.Extensions;
 using Microsoft.AspNetCore.JsonPatch;
 using System.Reflection;
+using System.Text.Json.Nodes;
 using LinqKit;
 using Microsoft.AspNetCore.JsonPatch.Operations;
 using TabTabGo.Core.Exceptions;
@@ -12,6 +13,7 @@ using TabTabGo.Core.Infrastructure.Data;
 using TabTabGo.Core.ViewModels;
 namespace TabTabGo.Core.Services;
 
+[SuppressMessage("ReSharper", "MemberCanBeProtected.Global")]
 public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey>, IBaseService<TEntity, TKey>
     where TEntity : class, IEntity
 {
@@ -49,7 +51,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         CancellationToken cancellationToken = default)
     {
         if (!IsValidToCreate(entity, out string errorMessage))
-            throw new TTGException($"Failed to create {entity.ToString()}. {errorMessage}.", errorNumber: 2001);
+            throw new ApiException($"Failed to create {entity.ToString()}. {errorMessage}.", errorNumber: 2001);
         await PreCreate(entity, cancellationToken);
         var newEntity = await CurrentRepository.InsertAsync(entity, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
@@ -76,14 +78,16 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="entity"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    protected virtual async Task PostCreate(TEntity entity,
+    protected virtual Task PostCreate(TEntity entity,
         CancellationToken cancellationToken = default)
     {
+        return Task.CompletedTask;
     }
 
-    protected virtual async Task PreCreate(TEntity entity,
+    protected virtual Task PreCreate(TEntity entity,
         CancellationToken cancellationToken = default)
     {
+        return Task.CompletedTask;
     }
 
     #endregion
@@ -127,19 +131,22 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="entity"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    protected virtual async Task PostDelete(TEntity entity,
+    protected virtual Task PostDelete(TEntity entity,
         CancellationToken cancellationToken = default)
     {
+        return Task.CompletedTask;
     }
 
-    protected virtual async Task PreDelete(TEntity entity,
+    protected virtual Task PreDelete(TEntity entity,
         CancellationToken cancellationToken = default)
     {
+        return Task.CompletedTask;
     }
 
-    protected virtual async Task PostDelete(IEnumerable<TEntity> entity,
+    protected virtual Task PostDelete(IEnumerable<TEntity> entity,
         CancellationToken cancellationToken = default)
     {
+        return Task.CompletedTask;
     }
 
     protected virtual async Task PreDelete(IEnumerable<TEntity> entity,
@@ -187,15 +194,16 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     {
         var entities = await CurrentRepository.GetAsync(filter: e => ids.Contains(GetKey(e)),
             cancellationToken: cancellationToken);
-        await PreDelete(entities, cancellationToken);
-        foreach (var entity in entities)
+        var enumerable = entities as TEntity[] ?? entities.ToArray();
+        await PreDelete(enumerable, cancellationToken);
+        foreach (var entity in enumerable)
         {
             entity.IsEnabled = false;
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        await PostDelete(entities, cancellationToken);
-        return entities;
+        await PostDelete(enumerable, cancellationToken);
+        return enumerable;
     }
 
     #endregion
@@ -216,7 +224,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         await LoadEntityAsync(id, cancellationToken, includeProperties);
         //AutoMapper.Mapper.Map<TEntity, TEntity>(entity, this.CurrentEntity);
         if (!IsValidToUpdate(entity, out string errorMessage))
-            throw new TTGException($"Failed to Update {CurrentEntity.ToString()}. {errorMessage}", errorNumber: 4001);
+            throw new ApiException($"Failed to Update {CurrentEntity.ToString()}. {errorMessage}", errorNumber: 4001);
         await PreUpdate(CurrentEntity, entity, cancellationToken);
         entity.CopyObject<TEntity>(CurrentEntity, "IsEnabled");
         //var updatedEntity = await CurrentRepository.UpdateAsync(entity, cancellationToken);
@@ -225,6 +233,14 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return CurrentEntity;
     }
 
+    /// <summary>
+    /// Update entity after process patch json on entity object
+    /// </summary>
+    /// <param name="id">entity identifier</param>
+    /// <param name="entity">updated object</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <returns></returns>
+    /// <exception cref="ApiException"></exception>
     public virtual async Task<TEntity> UpdateChanges(TKey id, TEntity entity, CancellationToken cancellationToken)
     {
         var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
@@ -232,7 +248,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             await LoadEntityAsync(id, cancellationToken, includeProperties);
         
         if (!IsValidToUpdate(CurrentEntity, out string errorMessage))
-            throw new TTGException($"Failed to Update {CurrentEntity.ToString()}. {errorMessage}.", errorNumber: 4002);
+            throw new ApiException($"Failed to Update {CurrentEntity.ToString()}. {errorMessage}.", errorNumber: 4002);
         await PreUpdate(CurrentEntity, entity, cancellationToken);
         
         var updatedEntity = await CurrentRepository.UpdateAsync(CurrentEntity, cancellationToken);
@@ -251,11 +267,11 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     public virtual async Task<TEntity> Update(TKey id, JsonPatchDocument<TEntity> entity,
         CancellationToken cancellationToken = default)
     {
-        var includeProeprties = GetIncludedProperties(entity, IgnoredProperties);
-        await LoadEntityAsync(id, cancellationToken, includeProeprties);
+        var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
+        await LoadEntityAsync(id, cancellationToken, includeProperties);
 
         if (!IsValidToUpdate(CurrentEntity, out string errorMessage))
-            throw new TTGException($"Failed to Update {CurrentEntity.ToString()}. {errorMessage}.", errorNumber: 4002);
+            throw new ApiException($"Failed to Update {CurrentEntity.ToString()}. {errorMessage}.", errorNumber: 4002);
         await PreUpdate(CurrentEntity, entity, cancellationToken);
         entity.ApplyTo(CurrentEntity, error =>
         {
@@ -279,13 +295,13 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="entity"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public virtual async Task<TEntity> Update(TKey id, JObject entity,
+    public virtual async Task<TEntity> Update(TKey id, JsonObject entity,
         CancellationToken cancellationToken = default)
     {
         var includeProeprties = GetIncludedProperties(entity, IgnoredProperties);
         await LoadEntityAsync(id, cancellationToken, includeProeprties);
         if (!IsValidToUpdate(CurrentEntity, out string errorMessage))
-            throw new TTGException($"Failed to Update {CurrentEntity.ToString()}. {errorMessage}.", errorNumber: 4002);
+            throw new ApiException($"Failed to Update {CurrentEntity.ToString()}. {errorMessage}.", errorNumber: 4002);
         await PreUpdate(CurrentEntity, entity, cancellationToken);
         entity.Populate<TEntity>(CurrentEntity);
         var updatedEntity = await CurrentRepository.UpdateAsync(CurrentEntity, cancellationToken);
@@ -300,39 +316,61 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="entity"></param>
     /// <param name="validationErrorMessage"></param>
     /// <returns></returns>
-    public virtual bool IsValidToUpdate(TEntity entity, out string validationErrorMessage)
+    public virtual bool IsValidToUpdate(TEntity? entity, out string validationErrorMessage)
     {
         validationErrorMessage = string.Empty;
         return true;
     }
 
-    public virtual async Task PostUpdate(TEntity entity,
+    public virtual Task PostUpdate(TEntity entity,
         CancellationToken cancellationToken = default)
     {
+        return Task.CompletedTask;
     }
 
-    public virtual async Task PreUpdate(TEntity current, TEntity entity,
+    public virtual Task PreUpdate(TEntity current, TEntity entity,
         CancellationToken cancellationToken = default)
     {
+        return Task.CompletedTask;
     }
 
-    public virtual async Task PreUpdate(TEntity current, JObject entity,
+    /// <summary>
+    /// Action can do before update entity
+    /// </summary>
+    /// <param name="current">current unchanged entity</param>
+    /// <param name="entity">updated json entity</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <returns></returns>
+    public virtual Task PreUpdate(TEntity current, JsonObject entity,
         CancellationToken cancellationToken = default)
     {
+        return Task.CompletedTask;
     }
 
-    public virtual async Task PreUpdate(TEntity current, JsonPatchDocument<TEntity> entity,
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="current"></param>
+    /// <param name="entity"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public virtual Task PreUpdate(TEntity current, JsonPatchDocument<TEntity> entity,
         CancellationToken cancellationToken = default)
     {
+        return Task.CompletedTask;
     }
 
     #endregion
 
-    public virtual void HandleJsonOperator(Operation op, object targetObj)
+    /// <summary>
+    /// Handle Json Patch Operation
+    /// </summary>
+    /// <param name="op"></param>
+    /// <param name="targetObj"></param>
+    public virtual void HandleJsonOperator(Operation op, object? targetObj)
     {
-        object currentObj = targetObj;
+        object? currentObj = targetObj;
 
-        PropertyInfo? propInfo;
         string propPath = string.Empty;
         var propPaths = op.path.Split('/');
         var addToExtraProperties = false;
@@ -341,8 +379,8 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             //TODO can be enhanced
             propPath = propPaths[i];
             // TODO Check if the path is number then get index
-            IEnumerable<PropertyInfo?> props = currentObj.GetType().GetProperties().Where(p => p.PropertyType.IsPublic);
-            propInfo = props.FirstOrDefault(p => p.Name.Equals(propPath, StringComparison.CurrentCultureIgnoreCase));
+            IEnumerable<PropertyInfo?> props = currentObj?.GetType()?.GetProperties()?.Where(p => p.PropertyType.IsPublic);
+            var propInfo = props?.FirstOrDefault(p => p.Name.Equals(propPath, StringComparison.CurrentCultureIgnoreCase));
             // check if propPath not available in object and children
             if (propInfo != null)
             {
@@ -387,7 +425,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         }
     }
 
-    protected virtual string[] GetIncludedProperties(TEntity fromClient, params string[] ignoredProperties)
+    protected virtual string[] GetIncludedProperties(TEntity fromClient, params string[]? ignoredProperties)
     {
         var properties = new List<string>();
         var entityType = typeof(TEntity);
@@ -416,14 +454,14 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return properties.ToArray();
     }
 
-    protected virtual string[] GetIncludedProperties(JObject fromClient, params string[] ignoredProperties)
+    protected virtual string[] GetIncludedProperties(JsonObject fromClient, params string[]? ignoredProperties)
     {
-        var properties = GetJObjectProps(fromClient, "", GetProperties(typeof(TEntity)), ignoredProperties);
+        var properties = GetJsonObjectProps(fromClient, "", GetProperties(typeof(TEntity)), ignoredProperties);
         return properties.ToArray();
     }
 
     protected virtual string[] GetIncludedProperties(JsonPatchDocument<TEntity> fromClient,
-        params string[] ignoredProperties)
+        params string[]? ignoredProperties)
     {
         var props = typeof(TEntity).GetProperties();
         var entityProps = props.Where(p => IsReferenceProperty(p.PropertyType)).Select(p => p.Name).ToList();
@@ -432,7 +470,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     }
 
     protected virtual string[] GetPropertyPath(string path, IList<string> entityProps,
-        params string[] ignoredProperties)
+        params string[]? ignoredProperties)
     {
         var propPath = string.Empty;
         var paths = new List<string>();
@@ -442,7 +480,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         {
             var prop = props[i];
             prop = prop.First().ToString().ToUpper() + prop.Substring(1);
-            if (!ignoredProperties.Contains(prop) && !int.TryParse(prop, out int dummy) && entityProps.Contains(prop))
+            if (ignoredProperties != null && !ignoredProperties.Contains(prop) && !int.TryParse(prop, out int dummy) && entityProps.Contains(prop))
             {
                 propPath += prop;
                 paths.Add(propPath);
@@ -468,47 +506,48 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return props.Where(p => IsReferenceProperty(p.PropertyType)).ToList();
     }
 
-    protected virtual List<string> GetJObjectProps(JObject fromClient, string parentPath,
-        IList<PropertyInfo> entityProps, string[] ignoredProperties)
+    protected virtual List<string> GetJsonObjectProps(JsonObject? fromClient, string parentPath,
+        IList<PropertyInfo> entityProps, string[]? ignoredProperties = null)
     {
         var properties = new List<string>();
+        if (fromClient == null) return properties;
         // should filter by entity type too
-        var jObjProps = fromClient.Properties().ToList();
-        JProperty jObjProp;
+        var jObjProps = fromClient.ToList();
+        KeyValuePair<string, JsonNode> jObjProp;
         string jPropName;
         string path;
-        PropertyInfo objPropInfo;
+        PropertyInfo? objPropInfo;
         foreach (var t in jObjProps)
         {
             jObjProp = t;
-            jPropName = jObjProp.Name.First().ToString().ToUpper() + jObjProp.Name.Substring(1);
+            jPropName = jObjProp.Key.First().ToString().ToUpper() + jObjProp.Key.Substring(1);
             path = string.IsNullOrEmpty(parentPath) ? jPropName : $"{parentPath}.{jPropName}";
             objPropInfo =
                 entityProps.FirstOrDefault(p => p.Name.Equals(jPropName, StringComparison.CurrentCultureIgnoreCase));
             if (
-                (jObjProp.Value.Type == JTokenType.Object || jObjProp.Value.Type == JTokenType.Array)
+                (jObjProp.Value is JsonObject || jObjProp.Value is JsonArray)
                 && objPropInfo != null
-                && !ignoredProperties.Contains(jPropName))
+                && ignoredProperties != null &&!ignoredProperties.Contains(jPropName))
             {
-                if (jObjProp.Value.Type == JTokenType.Object)
+                if (jObjProp.Value is JsonObject)
                 {
                     properties.Add(path);
 
-                    properties.AddRange(GetJObjectProps(jObjProp.Value as JObject, path, GetProperties(objPropInfo),
+                    properties.AddRange(GetJsonObjectProps(jObjProp.Value as JsonObject, path, GetProperties(objPropInfo),
                         ignoredProperties));
                 }
-                else if (jObjProp.Value.Type == JTokenType.Array)
+                else if (jObjProp.Value is JsonArray)
                 {
                     properties.Add(path);
-                    var jArray = jObjProp.Value as JArray;
+                    var jArray = jObjProp.Value as JsonArray;
 
                     if (jArray != null)
                         foreach (var jToken in jArray)
                         {
-                            if (jToken is JObject token)
+                            if (jToken is JsonObject token)
                             {
                                 properties.AddRange(
-                                    GetJObjectProps(
+                                    GetJsonObjectProps(
                                         token, path,
                                         objPropInfo.PropertyType.IsConstructedGenericType
                                             ? GetProperties(objPropInfo.PropertyType.GenericTypeArguments.First())

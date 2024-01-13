@@ -50,20 +50,33 @@
         }
 
 
+        /// <summary>
+        /// Convert Dictionary to XML
+        /// </summary>
+        /// <param name="dictionary">dictionary object</param>
+        /// <param name="usePathAsKey"></param>
+        /// <param name="separator"></param>
+        /// <returns></returns>
         public static string ConvertToXml(this IDictionary<string, object>? dictionary, bool usePathAsKey = false, char[]? separator = null)
         {
             if (dictionary == null) return string.Empty ;
-            var jsonObject = usePathAsKey ? SerializerEngine.ConvertDictionaryToJson(dictionary.ToDictionary(d => d.Key, d => d.Value.ToString()), separator)
-             : JToken.Parse(JsonConvert.SerializeObject(dictionary));
+            var jsonObject = ConvertToJson(dictionary, usePathAsKey, separator);
 
-            return jsonObject.ConvertToXml();
+            return jsonObject?.ConvertToXml() ?? "{}";
         }
 
-        public static JToken ConvertToJson(this IDictionary<string, object>? dictionary, bool usePathAsKey = false, char[]? separator = null)
+        /// <summary>
+        /// Convert Dictionary to Json
+        /// </summary>
+        /// <param name="dictionary"></param>
+        /// <param name="usePathAsKey"></param>
+        /// <param name="separator"></param>
+        /// <returns></returns>
+        public static JsonNode? ConvertToJson(this IDictionary<string, object>? dictionary, bool usePathAsKey = false, char[]? separator = null)
         {
-            if (dictionary == null) return new JObject();
+            if (dictionary == null) return new JsonObject();
             return usePathAsKey ? SerializerEngine.ConvertDictionaryToJson(dictionary.ToDictionary(d => d.Key, d => d.Value.ToString()), separator)
-             : JToken.Parse(JsonConvert.SerializeObject(dictionary));
+             : JsonNode.Parse(JsonSerializer.Serialize(dictionary, SerializerEngine.JsonSerializationSettings));
         }
         
         

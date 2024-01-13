@@ -1,6 +1,6 @@
 ﻿using System.Linq.Expressions;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
-using Newtonsoft.Json.Linq;
 using TabTabGo.Core.Extensions;
 using TabTabGo.Core.Infrastructure.Data;
 
@@ -10,8 +10,7 @@ namespace TabTabGo.Data.EF.Repositories
     /// 
     /// </summary>
     /// <typeparam name="TEntity">The type of the entity.</typeparam>
-    public class GenericRepository<TEntity, TKey> : GenericReadRepository<TEntity, TKey>, IDisposable,
-        IGenericRepository<TEntity, TKey> where TEntity : class
+    public class GenericRepository<TEntity, TKey> : GenericReadRepository<TEntity, TKey>, IDisposable, IGenericRepository<TEntity, TKey> where TEntity : class
     {
         public GenericRepository(DbContext dbContext) : base(dbContext)
         {
@@ -57,7 +56,7 @@ namespace TabTabGo.Data.EF.Repositories
             return Task.Run(() => _dbSet.UpdateRange(items), cancellationToken);
         }
 
-        public virtual void Update(JObject entityToUpdate, Expression<Func<TEntity, bool>> filter)
+        public virtual void Update(JsonObject entityToUpdate, Expression<Func<TEntity, bool>> filter)
         {
             var entities = _dbSet.Where(filter);
             foreach (var entity in entities)
@@ -76,7 +75,7 @@ namespace TabTabGo.Data.EF.Repositories
             return result.Entity;
         }
 
-        public virtual Task UpdateAsync(JObject entityToUpdate, Expression<Func<TEntity, bool>> filter,
+        public virtual Task UpdateAsync(JsonObject entityToUpdate, Expression<Func<TEntity, bool>> filter,
             CancellationToken cancellationToken = default)
         {
             return Task.Run(() => Update(entityToUpdate, filter), cancellationToken);
@@ -92,7 +91,7 @@ namespace TabTabGo.Data.EF.Repositories
 
         #region Delete
 
-        public virtual TEntity Delete(object? key)
+        public virtual TEntity Delete(TKey? key)
         {
             var entity = GetByKey(key);
 

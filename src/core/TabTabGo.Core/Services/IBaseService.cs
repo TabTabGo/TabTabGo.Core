@@ -10,7 +10,7 @@ public interface IBaseService<TEntity, TKey> :IBaseReadService<TEntity, TKey> wh
     Task<TEntity> Update(TKey id, TEntity entity, CancellationToken cancellationToken = default);
     Task<TEntity> UpdateChanges(TKey id, TEntity entity, CancellationToken cancellationToken);
     Task<TEntity> Update(TKey id, JsonPatchDocument<TEntity> entity, CancellationToken cancellationToken = default);
-    Task<TEntity> Update(TKey id, JObject entity, CancellationToken cancellationToken = default);
+    Task<TEntity> Update(TKey id, JsonObject entity, CancellationToken cancellationToken = default);
     void HandleJsonOperator<T>(Operation operation, object affectedObject);
     #endregion
 

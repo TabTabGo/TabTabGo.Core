@@ -38,11 +38,11 @@ namespace TabTabGo.Core.WebApi.Middlewares
             var httpCode = HttpStatusCode.InternalServerError; // 500 if unexpected
             string errorCode = null;
             int errorNumber;
-            // if (exception is TabTabGo.Core.TTGException)
+            // if (exception is TabTabGo.Core.ApiException)
             // {
-            //     httpCode = (exception as TTGException).HttpStatusCode;
-            //     errorNumber = (exception as TTGException).ErrorNumber;
-            //     errorCode = (exception as TTGException).ErrorCode;
+            //     httpCode = (exception as ApiException).HttpStatusCode;
+            //     errorNumber = (exception as ApiException).ErrorNumber;
+            //     errorCode = (exception as ApiException).ErrorCode;
             // }
             //else if (exception is NotFoundException) code = HttpStatusCode.Unauthorized;
             //else if (exception is MyException) code = HttpStatusCode.BadRequest;

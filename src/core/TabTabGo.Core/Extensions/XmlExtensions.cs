@@ -1,60 +1,83 @@
-﻿using System.Xml;
+﻿// ReSharper disable All
+using System.Xml;
 using System.Xml.Linq;
 
 namespace TabTabGo.Core.Extensions;
 
 public static class XmlExtensions
 {
-    public static JObject ConvertToJson(this string xml)
+    /// <summary>
+    /// Convert xml string to Json Object
+    /// </summary>
+    /// <param name="xml"></param>
+    /// <returns></returns>
+    public static JsonObject? ConvertToJson(this string xml)
     {
-        if (string.IsNullOrEmpty(xml)) new JObject();
+        if (string.IsNullOrEmpty(xml)) new JsonObject();
         var sJson = SerializerEngine.XmlToJson(xml);
-        return JObject.Parse(sJson);
+        return JsonNode.Parse(sJson) as JsonObject;
     }
 
-    public static JArray ConvertToJArray(this string xml)
+    /// <summary>
+    /// Convert xml string to Json Array
+    /// </summary>
+    /// <param name="xml"></param>
+    /// <returns></returns>
+    public static JsonArray ConvertToJsonArray(this string xml)
     {
-        return ConvertToJArray(xml, "root");
+        return ConvertToJsonArray(xml, "root");
     }
 
-    public static JArray ConvertToJArray(this string xml, string rootFieldName)
+    /// <summary>
+    /// Convert xml string to Json Array
+    /// </summary>
+    /// <param name="xml"></param>
+    /// <param name="rootFieldName"></param>
+    /// <returns></returns>
+    public static JsonArray ConvertToJsonArray(this string xml, string rootFieldName)
     {
-        var jObject = ConvertToJson(xml);
-        if (jObject.ContainsKey(rootFieldName) && jObject[rootFieldName] is JArray)
+        var jsonObject = ConvertToJson(xml);
+        if (jsonObject != null && jsonObject.ContainsKey(rootFieldName) && jsonObject[rootFieldName] is JsonArray)
         {
-            return jObject[rootFieldName] as JArray;
+            return jsonObject[rootFieldName] as JsonArray ?? new JsonArray();
         }
-        return new JArray();
+        return new JsonArray();
     }
 
-    public static JObject ConvertToJson(this XmlDocument xmlDoc)
+    public static JsonObject ConvertToJson(this XmlDocument? xmlDoc)
     {
-        return xmlDoc == null ? new JObject() : JObject.Parse(SerializerEngine.XmlToJson(xmlDoc));
+        return xmlDoc == null ? new JsonObject() : JsonNode.Parse(SerializerEngine.XmlToJson(xmlDoc)) as JsonObject ?? new JsonObject();
 
     }
 
-    public static JObject ConvertToJson(this XDocument xmlDoc)
+    public static JsonObject? ConvertToJson(this XDocument? xmlDoc)
     {
-        return xmlDoc == null ? new JObject() : JObject.Parse(SerializerEngine.XmlToJson(xmlDoc));
+        return xmlDoc == null ? new JsonObject() : JsonNode.Parse(SerializerEngine.XmlToJson(xmlDoc)) as JsonObject;
     }
 
-    public static IDictionary<string, object> ConvertToDictionary(this XDocument xmlDoc, bool usePathAsKey = false, string separator = null)
+    public static IDictionary<string, object> ConvertToDictionary(this XDocument xmlDoc,
+        bool usePathAsKey = false,
+        string? separator = null)
     {
-        //TODO direct convert to dictionaru
+        //TODO direct convert to dictionary
         var jsonObject = ConvertToJson(xmlDoc);
         return jsonObject.ConvertToDictionary(usePathAsKey, separator);
     }
 
-    public static IDictionary<string, object> ConvertToDictionary(this XmlDocument xmlDoc, bool usePathAsKey = false, string separator = null)
+    public static IDictionary<string, object> ConvertToDictionary(this XmlDocument xmlDoc,
+        bool usePathAsKey = false,
+        string? separator = null)
     {
-        //TODO direct convert to dictionaru
+        //TODO direct convert to dictionary
         var jsonObject = ConvertToJson(xmlDoc);
         return jsonObject.ConvertToDictionary(usePathAsKey, separator);
     }
 
-    public static IDictionary<string, object> ConvertToDictionary(this string xmlDoc, bool usePathAsKey = false, string separator = null)
+    public static IDictionary<string, object> ConvertToDictionary(this string xmlDoc, 
+        bool usePathAsKey = false,
+        string? separator = null)
     {
-        //TODO direct convert to dictionaru
+        //TODO direct convert to dictionary
         var jsonObject = ConvertToJson(xmlDoc);
         return jsonObject.ConvertToDictionary(usePathAsKey, separator);
     }

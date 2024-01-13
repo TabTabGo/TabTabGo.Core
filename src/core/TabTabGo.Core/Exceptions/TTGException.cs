@@ -4,6 +4,11 @@ using Microsoft.Extensions.Logging;
 namespace TabTabGo.Core.Exceptions;
 
 
+/// <summary>
+/// Exception to be thrown by the API
+/// </summary>
+// deprecated
+[Obsolete("Use ApiException instead")]
 public class TTGException : Exception
 {
     public int ErrorNumber { get; private set; }

@@ -1,32 +1,32 @@
-﻿namespace TabTabGo.Core.Comparer;
+﻿
+namespace TabTabGo.Core.Comparer;
 
-public class JArrayComparer : IEqualityComparer<JArray>, IDisposable
+public class JsonArrayComparer : IEqualityComparer<JsonArray>, IDisposable
 {
     public string[] IgnoredProperties { get; set; }
 
-    public JArrayComparer(params string[] ignoredProps)
+    public JsonArrayComparer(params string[] ignoredProps)
     {
         IgnoredProperties = ignoredProps;
     }
-    public bool Equals(JArray x, JArray y)
+    public bool Equals(JsonArray? x, JsonArray? y)
     {
         if (x == null && y == null) return true;
         if (x != null && y == null) return false;
         if (x == null && y != null) return false;
         if (x.Count() != y.Count()) return false;
-        var jCompare = new JTokenComparer(IgnoredProperties);
+        var jCompare = new JsonNodeComparer(IgnoredProperties);
 
         var comparedItems = new List<int>();
         foreach (var xItem in x)
         {
-            var xFistProp = xItem.First() as JProperty;
             var compareResult = false;
             for (int i = 0; i < y.Count; i++)
             {
                 if (comparedItems.Contains(i)) continue;
 
                 var yItem = y[i];
-                if (xItem is JArray && yItem is JArray)
+                if (xItem is JsonArray && yItem is JsonArray)
                 {
                     if (Equals(xItem, yItem))
                     {
@@ -36,7 +36,7 @@ public class JArrayComparer : IEqualityComparer<JArray>, IDisposable
                     }
                     else continue;
                 }
-                if (xItem is JToken && yItem is JToken)
+                if (xItem is JsonNode && yItem is JsonNode)
                 {
                     if (jCompare.Equals(xItem, yItem))
                     {
@@ -55,7 +55,7 @@ public class JArrayComparer : IEqualityComparer<JArray>, IDisposable
         return true;
     }
 
-    public int GetHashCode(JArray obj)
+    public int GetHashCode(JsonArray obj)
     {
         return obj.GetHashCode();
     }

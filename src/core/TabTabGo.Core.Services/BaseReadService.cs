@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -10,11 +11,11 @@ using TabTabGo.Core.Entities;
 using TabTabGo.Core.Enums;
 using TabTabGo.Core.Infrastructure.Data;
 using TabTabGo.Core.Models;
-using TabTabGo.Core.Services.ViewModels;
 using TabTabGo.Core.ViewModels;
 
 namespace TabTabGo.Core.Services;
 
+[SuppressMessage("ReSharper", "MemberCanBeProtected.Global")]
 public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity, TKey>
     where TEntity : class, IEntity
 {
@@ -37,7 +38,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     /// <summary>
     /// Properties to be ignored when load data 
     /// </summary>
-    protected virtual string[] IgnoredProperties { get; } = new string[] { };
+    protected virtual string[]? IgnoredProperties { get; } = new string[] { };
 
     protected abstract Expression<Func<TEntity, bool>> GetKeyPredicate(TKey id);
     protected abstract TKey GetKey(TEntity entity);
@@ -640,12 +641,23 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
         return new List<DataColumn>();
     }
 
-    public virtual async Task<Stream> ExportFile<TResult>(ExportConfiguration config, object oDataQueryOptions,
-        Expression<Func<TEntity, bool>> fixCriteria = null,
-        string[] includeProperties = null, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Export data to file format based on oData query
+    /// </summary>
+    /// <param name="config"></param>
+    /// <param name="oDataQueryOptions"></param>
+    /// <param name="fixCriteria"></param>
+    /// <param name="includeProperties"></param>
+    /// <param name="cancellationToken"></param>
+    /// <typeparam name="TResult"></typeparam>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public virtual Task<Stream> ExportFile<TResult>(ExportConfiguration config, object oDataQueryOptions,
+        Expression<Func<TEntity, bool>>? fixCriteria = null,
+        string[]? includeProperties = null, CancellationToken cancellationToken = default)
         where TResult : class
     {
-        throw new NotImplementedException();
+        throw new NotImplementedException($"{nameof(TEntity)} export files is not implemented");
     }
 
     /// <summary>

@@ -7,5 +7,6 @@ public enum ExportType
     Xml=5,
     Json=6,
     Yaml=7,
-    Html=8
+    Html=8,
+    Pdf=9,
 }

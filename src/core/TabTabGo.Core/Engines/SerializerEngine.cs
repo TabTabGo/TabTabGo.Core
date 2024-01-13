@@ -1,28 +1,49 @@
-﻿using System.Xml;
+﻿
+using System.Xml;
 using System.Xml.Linq;
 using System.Xml.Serialization;
+using JsonSerializer = System.Text.Json.JsonSerializer;
+
 
 namespace TabTabGo.Core;
 
 /// <summary>
-/// TODO make sure create extenstion for each function
+/// Serialize engine to handle all serialization and deserialization
 /// </summary>
 public static class SerializerEngine
 {
-    private static JsonSerializerSettings _jsonSerializationSettings;
-    private static JsonSerializerSettings GetJsonSerializationSettings()
-    {
-        if (_jsonSerializationSettings == null)
-        {
-            _jsonSerializationSettings = new JsonSerializerSettings();
-            _jsonSerializationSettings.ReferenceLoopHandling = Newtonsoft.Json.ReferenceLoopHandling.Ignore;
-            _jsonSerializationSettings.PreserveReferencesHandling = Newtonsoft.Json.PreserveReferencesHandling.None;
-        }
+    private static JsonSerializerOptions? _jsonSerializationSettings = null;
 
-        return _jsonSerializationSettings;
+    /// <summary>
+    /// Default Json Serialization Settings
+    /// </summary>
+    /// <returns></returns>
+    public static JsonSerializerOptions? JsonSerializationSettings
+    {
+        get
+        {
+            _jsonSerializationSettings ??= new JsonSerializerOptions()
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                // PropertyNameCaseInsensitive = true, // support sensitive case
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                IgnoreReadOnlyProperties = true,
+                AllowTrailingCommas = true,
+                ReadCommentHandling = JsonCommentHandling.Skip,
+                WriteIndented = true,
+                Converters =
+                {
+                    new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)
+                }
+            };
+
+            return _jsonSerializationSettings;
+        }
     }
 
+
     #region Xml Serialization
+
     /// <summary>
     /// Serialize Object to xml 
     /// </summary>
@@ -44,64 +65,115 @@ public static class SerializerEngine
 
         return xml;
     }
+
     /// <summary>
     /// Deserialize xml to object
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="xml"></param>
     /// <returns></returns>
-    public static T XmlToObject<T>(string xml) where T : class
+    public static T? XmlToObject<T>(string xml) where T : class
     {
         var xsSerializer = new XmlSerializer(typeof(T));
-        T result = null;
-        using (TextReader reader = new StringReader(xml))
-        {
-            result = (T)xsSerializer.Deserialize(reader);
-        }
+        T? result = null;
+        using TextReader reader = new StringReader(xml);
+        result = (T)xsSerializer.Deserialize(reader)!;
 
         return result;
     }
 
+    /// <summary>
+    /// Convert xml to json
+    /// </summary>
+    /// <param name="xml"></param>
+    /// <returns></returns>
     public static string XmlToJson(string xml)
     {
         var doc = XDocument.Parse(xml);
         return XmlToJson(doc);
     }
 
-    public static string XmlToJson(XDocument xDocument, string empty = "{}")
+    /// <summary>
+    /// Serialize XmlNode to json
+    /// </summary>
+    /// <param name="xmlNode"></param>
+    /// <returns></returns>
+    public static string XmlToJson(XmlNode xmlNode)
     {
-        var sJson = JsonConvert.SerializeXNode(xDocument, Newtonsoft.Json.Formatting.None, true);
-        return sJson == "null" ? empty : sJson;
+        // Load the XML into an XmlDocument
+        XmlDocument doc = new XmlDocument();
+        doc.LoadXml(xmlNode.OuterXml);
+
+        // Convert the XmlDocument to a JsonDocument
+        var jsonDocument = JsonDocument.Parse(XmlToJson(doc));
+
+        // Serialize the JsonDocument to a JSON string
+        return JsonSerializer.Serialize(jsonDocument);
     }
 
-    public static string XmlToJson(XmlDocument xDocument, string empty = "{}")
+    /// <summary>
+    /// Serialize XDocument to json
+    /// </summary>
+    /// <param name="xDocument"></param>
+    /// <param name="empty"></param>
+    /// <returns></returns>
+    public static string XmlToJson(XDocument? xDocument, string empty = "{}")
     {
-        var sJson = JsonConvert.SerializeXmlNode(xDocument, Newtonsoft.Json.Formatting.None, true);
-        return sJson == "null" ? empty : sJson;
+        if(xDocument == null) return empty;
+        var sJson = XElementToJsonObject(xDocument.Root);
+        return sJson != null ? sJson.ToString() : empty ;
     }
 
-    public static dynamic XmlToDynamic(XDocument xDocument)
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="xDocument"></param>
+    /// <returns></returns>
+    public static dynamic? XmlToDynamic(XDocument xDocument)
     {
         var json = XmlToJson(xDocument);
         return JsonToDynamic(json);
     }
 
-    public static dynamic XmlToDynamic(string xml)
+    public static dynamic? XmlToDynamic(string xml)
     {
         if (string.IsNullOrEmpty(xml))
         {
-            dynamic obj = new JObject();
+            dynamic obj = new JsonObject();
             return obj;
         }
+
         var json = XmlToJson(xml);
         return JsonToDynamic(json);
     }
+
+    private static JsonObject XElementToJsonObject(XElement? element)
+    {
+        if(element == null) return new JsonObject();
+        JsonObject jsonObject = new JsonObject();
+
+        foreach (XElement child in element.Elements())
+        {
+            if (child.HasElements)
+            {
+                jsonObject.Add(child.Name.LocalName, XElementToJsonObject(child));
+            }
+            else
+            {
+                jsonObject.Add(child.Name.LocalName, child.Value);
+            }
+        }
+
+        return jsonObject;
+    }
+
     #endregion
 
     #region Dynamic Serialization
+
     public static string DynamicToJson(dynamic dObject)
     {
-        return JsonConvert.SerializeObject(dObject, GetJsonSerializationSettings());
+        return JsonSerializer.Serialize(dObject, JsonSerializationSettings);
     }
 
     public static XDocument DynamicToXml(dynamic dObject)
@@ -109,57 +181,118 @@ public static class SerializerEngine
         var json = DynamicToJson(dObject);
         return JsonToXml(json);
     }
+
     #endregion
 
     #region Json Serialization
 
-    public static dynamic ObjectToDynamic(object obj)
+    /// <summary>
+    /// Serialize object to dynamic object
+    /// </summary>
+    /// <param name="obj"></param>
+    /// <returns></returns>
+    public static dynamic? ObjectToDynamic(object obj)
     {
-        return JObject.Parse(ObjectToJson(obj));
+        return JsonNode.Parse(ObjectToJson(obj));
     }
 
+    /// <summary>
+    /// Serialize object to json string 
+    /// </summary>
+    /// <param name="obj"></param>
+    /// <returns></returns>
     public static string ObjectToJson(object obj)
     {
-        return JsonConvert.SerializeObject(obj, GetJsonSerializationSettings());
+        return JsonSerializer.Serialize(obj, JsonSerializationSettings);
     }
 
-    public static T JsonToObject<T>(string json)
+    /// <summary>
+    /// Deserialize json string to object
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="json"></param>
+    /// <returns></returns>
+    public static T? JsonToObject<T>(string json)
     {
-        return JsonConvert.DeserializeObject<T>(json, GetJsonSerializationSettings());
+        return JsonSerializer.Deserialize<T>(json, JsonSerializationSettings);
     }
 
-    public static XDocument JsonToXml(string json)
+    /// <summary>
+    /// Convert json to xml
+    /// </summary>
+    /// <param name="json">Json string</param>
+    /// <param name="rootFieldName"> root field name </param>
+    /// <returns>converted XDocument from json</returns>
+    public static XDocument? JsonToXml(string json, string rootFieldName = "root")
     {
         if (string.IsNullOrEmpty(json))
         {
             var xDoc = XDocument.Parse("<root/>");
-
             return xDoc;
         }
-        return JsonConvert.DeserializeXNode(json, "root", true);
+
+        var rootElement = JsonToXElement(json, rootFieldName);
+        return new XDocument(rootElement);
     }
 
-    public static dynamic JsonToDynamic(string json)
+    private static XElement JsonToXElement(string json, string rootFieldName)
+    {
+        using JsonDocument document = JsonDocument.Parse(json);
+        return JsonElementToXElement(new XElement(rootFieldName), document.RootElement);
+    }
+
+    private static XElement JsonElementToXElement(XElement parent, JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (JsonProperty prop in element.EnumerateObject())
+                {
+                    parent.Add(JsonElementToXElement(new XElement(prop.Name), prop.Value));
+                }
+                break;
+            case JsonValueKind.Array:
+                int i = 0;
+                foreach (JsonElement value in element.EnumerateArray())
+                {
+                    parent.Add(JsonElementToXElement(new XElement($"{parent.Name}{i++}"), value));
+                }
+                break;
+            default:
+                parent.Value = element.ToString();
+                break;
+        }
+        return parent;
+    }
+    /// <summary>
+    /// Parse json string to dynamic object
+    /// </summary>
+    /// <param name="json"></param>
+    /// <returns></returns>
+    public static dynamic? JsonToDynamic(string json)
     {
         if (string.IsNullOrEmpty(json) || json == "null")
         {
-            dynamic obj = new JObject();
+            dynamic obj = new JsonObject();
             return obj;
         }
-        return JObject.Parse(json);
+
+        return JsonNode.Parse(json);
     }
+
     #endregion
 
     #region Enum Serialization
+
     public static dynamic EnumToDynamic(Type enumerationType)
     {
-        dynamic json = new JArray() as dynamic;
+        dynamic json = new JsonArray() as dynamic;
 
         foreach (var enumeration in Enum.GetValues(enumerationType))
         {
-            var obj = new JObject() as dynamic;
+            var obj = new JsonObject() as dynamic;
             obj.id = (int)enumeration;
-            obj.name = enumeration.ToString();
+            obj.name = enumeration.ToString() ?? string.Empty;
 
             json.Add(obj);
         }
@@ -174,9 +307,9 @@ public static class SerializerEngine
 
     public static dynamic EnumToDynamic(object enumeration)
     {
-        var obj = new JObject() as dynamic;
+        var obj = new JsonObject() as dynamic;
         obj.id = (int)enumeration;
-        obj.name = enumeration.ToString();
+        obj.name = enumeration?.ToString() ?? string.Empty;
 
         return obj;
     }
@@ -185,11 +318,13 @@ public static class SerializerEngine
     {
         return DynamicToJson(EnumToDynamic(enumeration));
     }
+
     #endregion
 
     #region Map Dictionary To Json
+
     /// <summary>
-    /// converts keyvalue pair  into a dynamic object (json)  
+    /// converts key-value pair  into a dynamic object (json)  
     /// </summary>
     /// <example>
     /// a dictionary with following items:-
@@ -199,7 +334,7 @@ public static class SerializerEngine
     ///     arr1_0_item         arrayval1
     ///     arr1_1_item         arrayval2
     ///     prop2               val2
-    ///will convert into following JObject
+    ///will convert into following JsonObject
     ///{
     ///     prop1: "val1",
     ///     obj1: {
@@ -215,118 +350,106 @@ public static class SerializerEngine
     /// </example>
     /// <param name="dictionary"></param>
     /// <param name="separator">list of separator for property path. default is "_" and "." </param>
-    /// <returns>JObject</returns>
-    public static JObject ConvertDictionaryToJson(Dictionary<string, string> dictionary, char[]? separator = null)
+    /// <returns>JsonObject</returns>
+    public static JsonObject ConvertDictionaryToJson(Dictionary<string, string?> dictionary, char[]? separator = null)
     {
-        var jResult = new JObject();
+        var jResult = new JsonObject();
         separator ??= new[] { '_', '.' };
         foreach (var keyValuePair in dictionary)
         {
-            MapToJObject(keyValuePair.Key.Split(separator), jResult, keyValuePair.Value);
+            MapToJsonObject(keyValuePair.Key.Split(separator), jResult, keyValuePair.Value);
         }
 
         return jResult;
     }
 
     /// <summary>
-    /// 
+    /// Map keyvalue pair to json object 
     /// </summary>
     /// <param name="tokens">property path in list of token</param>
     /// <param name="jObj">Json Object</param>
     /// <param name="value">Property path value</param>
-    public static void MapToJObject(string[] tokens, JObject jObj, string value)
+    public static void MapToJsonObject(string[] tokens, JsonObject jObj, string value)
     {
         var jCurrent = jObj;
         for (int t = 0; t < tokens.Length; t++)
         {
             if (t < tokens.Length - 1)
             {
-                bool isArray = false;
-                int index = 0;
-                isArray = int.TryParse(tokens[t + 1], out index);
+                var isArray = int.TryParse(tokens[t + 1], out var index);
                 if (jCurrent == null)
                 {
-                    jCurrent = new JObject(tokens[t]);
+                    jCurrent = new JsonObject() { { tokens[t], isArray ? new JsonArray() : new JsonObject() } };
                 }
-                else if (jCurrent[tokens[t]] == null) // || !(jCurrent[tokens[t]] is JObject) || !(jCurrent[tokens[t]] is JArray))
+                else if
+                    (jCurrent[tokens[t]] ==
+                     null) // || !(jCurrent[tokens[t]] is JsonObject) || !(jCurrent[tokens[t]] is JsonArray))
                 {
                     if (isArray)
                     {
-                        jCurrent.Add(new JProperty(tokens[t], new JArray()));
-                        JArray currentArray = jCurrent[tokens[t]] as JArray;
-                        currentArray.Insert(index, new JObject());
-                        jCurrent = currentArray[index] as JObject;
+                        var currentArray = new JsonArray();
+                        currentArray.Insert(index, new JsonObject());
+                        jCurrent.Add(tokens[t], currentArray);
+                        jCurrent = currentArray[index] as JsonObject;
                         t++;
                     }
                     else
                     {
-                        jCurrent.Add(new JProperty(tokens[t], new JObject()));
-                        jCurrent = jCurrent[tokens[t]] as JObject;
+                        jCurrent.Add(tokens[t], new JsonObject());
+                        jCurrent = jCurrent[tokens[t]] as JsonObject;
                     }
                 }
                 else
                 {
                     if (isArray)
                     {
-                        JArray currentArray = jCurrent[tokens[t]] as JArray;
+                        var currentArray = jCurrent[tokens[t]] as JsonArray ?? new JsonArray();
                         if (currentArray.Count <= index)
                         {
-                            currentArray.Insert(index, new JObject());
-                            jCurrent = currentArray[index] as JObject;
+                            currentArray.Insert(index, new JsonObject());
+                            jCurrent = currentArray[index] as JsonObject;
                         }
                         else
                         {
-                            jCurrent = currentArray[index] as JObject;
+                            jCurrent = currentArray[index] as JsonObject;
                         }
+
                         t++;
                     }
                     else
                     {
-                        jCurrent = jCurrent[tokens[t]] as JObject;
+                        jCurrent = jCurrent[tokens[t]] as JsonObject;
                     }
                 }
             }
             else
             {
-                JProperty prop = null;
-
-                if (jCurrent[tokens[t]] == null)
-                {
-                    prop = new JProperty(tokens[t], null);
-                    jCurrent.Add(prop);
-                }
-                else
-                {
-                    prop = jCurrent[tokens[t]] as JProperty;
-                }
-
+                jCurrent ??= new JsonObject();
                 string stringVal = value ?? string.Empty;
-                long longVal = 0;
-                double doubleVal = 0.0;
-                bool booleanVal = false;
-                bool isLong = long.TryParse(stringVal, out longVal);
-                bool isDouble = double.TryParse(stringVal, out doubleVal);
-                bool isBoolean = bool.TryParse(stringVal, out booleanVal);
+                bool isLong = long.TryParse(stringVal, out var longVal);
+                bool isDouble = double.TryParse(stringVal, out var doubleVal);
+                bool isBoolean = bool.TryParse(stringVal, out var booleanVal);
                 if (isLong)
-                    prop.Value = longVal;
+                    jCurrent.Add(tokens[t], longVal);
                 else if (isDouble)
-                    prop.Value = doubleVal;
+                    jCurrent.Add(tokens[t], doubleVal);
                 else if (isBoolean)
-                    prop.Value = booleanVal;
+                    jCurrent.Add(tokens[t], booleanVal);
                 else
-                    prop.Value = stringVal;
+                    jCurrent.Add(tokens[t], stringVal);
             }
-
         }
     }
+
     #endregion
 
     #region Map Json To Dictionary
+
     /// <summary>
     /// converts a dynamic object (json) into a keyvalue pair where both key and value are strings
     /// </summary>
     /// <example>
-    /// Following JObject :-
+    /// Following JsonObject :-
     /// {
     ///     prop1: "val1",
     ///     obj1: {
@@ -350,7 +473,7 @@ public static class SerializerEngine
     /// <param name="jObj">dynamic object (json)</param>
     /// <param name="separator">properties path separator. default is "_"</param>
     /// <returns><![CDATA[Dictionary<string,string>]]></returns> 
-    public static Dictionary<string, string> ConvertJsonToDictionary(JObject? jObj, string? separator = null)
+    public static Dictionary<string, string> ConvertJsonToDictionary(JsonObject? jObj, string? separator = null)
     {
         var result = new Dictionary<string, string>();
         if (string.IsNullOrEmpty(separator))
@@ -359,7 +482,7 @@ public static class SerializerEngine
         }
 
         if (jObj == null) return result;
-        foreach (KeyValuePair<string, JToken> kvJson in jObj)
+        foreach (KeyValuePair<string, JsonNode> kvJson in jObj)
         {
             AddKeyValue("", kvJson.Key, kvJson.Value, separator, result);
         }
@@ -367,11 +490,12 @@ public static class SerializerEngine
         return result;
     }
 
-    private static void AddKeyValue(string fullKey, string key, JToken token, string separator, Dictionary<string, string> result)
+    private static void AddKeyValue(string fullKey, string key, JsonNode token, string separator,
+        Dictionary<string, string> result)
     {
         Type tokenType = token.GetType();
 
-        if (tokenType == typeof(JValue))
+        if (tokenType == typeof(JsonValue))
         {
             string newKey = fullKey;
             if (!string.IsNullOrEmpty(newKey))
@@ -388,19 +512,20 @@ public static class SerializerEngine
             else
                 fullKey = fullKey + separator + key;
 
-            if (tokenType == typeof(JObject))
+            if (tokenType == typeof(JsonObject))
             {
-                foreach (KeyValuePair<string, JToken> kvJson in ((JObject)token))
+                foreach (KeyValuePair<string, JsonNode> kvJson in ((JsonObject)token))
                 {
                     AddKeyValue(fullKey, kvJson.Key, kvJson.Value, separator, result);
                 }
             }
-            if (tokenType == typeof(JArray))
+
+            if (tokenType == typeof(JsonArray))
             {
-                JArray arrToken = (JArray)token;
+                JsonArray arrToken = (JsonArray)token;
                 for (int index = 0; index < arrToken.Count; index++)
                 {
-                    foreach (KeyValuePair<string, JToken> kvJson in ((JObject)arrToken[index]))
+                    foreach (KeyValuePair<string, JsonNode> kvJson in ((JsonObject)arrToken[index]))
                     {
                         string arrayKey = string.Empty;
                         if (string.IsNullOrEmpty(fullKey))
@@ -414,7 +539,6 @@ public static class SerializerEngine
             }
         }
     }
+
     #endregion
-
 }
-

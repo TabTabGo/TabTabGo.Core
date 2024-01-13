@@ -1,12 +1,11 @@
 ﻿using System.Data;
 using System.Linq.Expressions;
-using TabTabGo.Core.Entities;
 using TabTabGo.Core.Enums;
 using TabTabGo.Core.Models;
 
 namespace TabTabGo.Core.Infrastructure.Data;
 
-public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEntity : class
+public interface IGenericReadRepository<TEntity, in TKey> : IDisposable where TEntity : class
 {
     #region Get Methods
 
@@ -16,25 +15,27 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <typeparam name="TResult"></typeparam>
     /// <param name="selector"></param>
     /// <param name="filter"></param>
-    /// <param name="pageSize"></param>
+    /// <param name="pageNumber"></param>
     /// <param name="pageSize"></param>
     /// <param name="orderBy"></param>
     /// <param name="includeProperties"></param>
+    /// <param name="flags"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     Task<PageList<TResult>> GetPageListAsync<TResult>(
         Func<TEntity, TResult> selector,
-        Expression<Func<TEntity?, bool>> filter = null,
+        Expression<Func<TEntity?, bool>>? filter = null,
         int pageNumber = 0,
         int pageSize = 20, 
-        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null,
-        string[] includeProperties = null,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
+        string[]? includeProperties = null,
         QueryFlags? flags = null,
         CancellationToken cancellationToken = default) where TResult : class;
 
-    // <summary>
+    /// <summary>
     /// Gets the queryable.
     /// </summary>
+    /// <param name="selector"></param>
     /// <param name="filter">The filter.</param>
     /// <param name="orderBy">The order by.</param>
     /// <param name="includeProperties">The include properties.</param>
@@ -43,10 +44,10 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <param name="flags"></param>
     /// <returns></returns>
     IQueryable<TResult> GetQueryable<TResult>(
-        Expression<Func<TEntity, TResult>> selector = null
-        , Expression<Func<TEntity, bool>> filter = null
-        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
-        , string[] includeProperties = null
+        Expression<Func<TEntity, TResult>>? selector = null
+        , Expression<Func<TEntity, bool>>? filter = null
+        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        , string[]? includeProperties = null
         , int? rowsToTake = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null) where TResult : class;
@@ -61,9 +62,9 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <param name="rowsToSkip">The rows to skip.</param>
     /// <param name="flags">list fo flags used for query</param>
     /// <returns></returns>
-    IEnumerable<TEntity> Get(Expression<Func<TEntity, bool>> filter = null
-        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
-        , string[] includeProperties = null
+    IEnumerable<TEntity> Get(Expression<Func<TEntity, bool>>? filter = null
+        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        , string[]? includeProperties = null
         , int? rowsToTake = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null);
@@ -77,10 +78,11 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <param name="rowsToTake">The rows to take.</param>
     /// <param name="rowsToSkip">The rows to skip.</param>
     /// <param name="flags">list fo flags used for query</param>
+    /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<IEnumerable<TEntity>> GetAsync(Expression<Func<TEntity, bool>> filter = null
-        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
-        , string[] includeProperties = null
+    Task<IEnumerable<TEntity>> GetAsync(Expression<Func<TEntity, bool>>? filter = null
+        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        , string[]? includeProperties = null
         , int? rowsToTake = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null
@@ -89,6 +91,7 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <summary>
     /// Gets the specified filter.
     /// </summary>
+    /// <param name="selector"></param>
     /// <param name="filter">The filter.</param>
     /// <param name="orderBy">The order by.</param>
     /// <param name="includeProperties">The include properties.</param>
@@ -97,9 +100,9 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <param name="flags">list fo flags used for query</param>
     /// <returns></returns>
     IEnumerable<TResult> Get<TResult>(Expression<Func<TEntity, TResult>> selector
-        , Expression<Func<TEntity, bool>> filter = null
-        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
-        , string[] includeProperties = null
+        , Expression<Func<TEntity, bool>>? filter = null
+        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        , string[]? includeProperties = null
         , int? rowsToTake = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null) where TResult : class;
@@ -107,57 +110,64 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <summary>
     /// Gets the specified filter.
     /// </summary>
+    /// <param name="selector"></param>
     /// <param name="filter">The filter.</param>
     /// <param name="orderBy">The order by.</param>
     /// <param name="includeProperties">The include properties.</param>
     /// <param name="rowsToTake">The rows to take.</param>
     /// <param name="rowsToSkip">The rows to skip.</param>
     /// <param name="flags">list fo flags used for query</param>
+    /// <param name="cancellationToken"></param>
     /// <returns></returns>
     Task<IEnumerable<TResult>> GetAsync<TResult>(Expression<Func<TEntity, TResult>> selector
-        , Expression<Func<TEntity, bool>> filter = null
-        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
-        , string[] includeProperties = null
+        , Expression<Func<TEntity, bool>>? filter = null
+        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        , string[]? includeProperties = null
         , int? rowsToTake = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null
         , CancellationToken cancellationToken = default) where TResult : class;
+    
     /// <summary>
-    /// Get Entitiy by entity key
+    /// Get Entity by entity key
     /// </summary>
     /// <param name="key"></param>
     /// <param name="includeProperties"></param>
     /// <returns></returns>
-    TEntity? GetByKey(object? key, string[] includeProperties = null);
+    TEntity? GetByKey(TKey key, string[]? includeProperties = null);
     /// <summary>
-    /// Get Entitiy by entity key Async
+    /// Get Entity by entity key Async
     /// </summary>
     /// <param name="key"></param>
     /// <param name="includeProperties"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<TEntity?> GetByKeyAsync(object key, string[] includeProperties = null, CancellationToken cancellationToken = default);
+    Task<TEntity?> GetByKeyAsync(TKey key, string[]? includeProperties = null, CancellationToken cancellationToken = default);
     #endregion
 
     #region Count Methods
+
     /// <summary>
     /// Counts the specified filter.
     /// </summary>
     /// <param name="filter">The filter.</param>
+    /// <param name="includes"></param>
     /// <param name="flags">list fo flags used for query</param>
     /// <returns></returns>
-    int Count(Expression<Func<TEntity, bool>> filter = null
-        , string[] includes = null
+    int Count(Expression<Func<TEntity, bool>>? filter = null
+        , string[]? includes = null
         , QueryFlags? flags = null);
 
     /// <summary>
     /// Counts the specified filter.
     /// </summary>
     /// <param name="filter">The filter.</param>
+    /// <param name="includes"></param>
     /// <param name="flags">list fo flags used for query</param>
+    /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<int> CountAsync(Expression<Func<TEntity, bool>> filter = null
-        , string[] includes = null
+    Task<int> CountAsync(Expression<Func<TEntity, bool>>? filter = null
+        , string[]? includes = null
         , QueryFlags? flags = null
         , CancellationToken cancellationToken = default);
     #endregion
@@ -172,9 +182,9 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <param name="rowsToSkip">The rows to skip.</param>
     /// <param name="flags">list fo flags used for query</param>
     /// <returns></returns>
-    TEntity FirstOrDefault(Expression<Func<TEntity, bool>> filter = null
-        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
-        , string[] includeProperties = null
+    TEntity FirstOrDefault(Expression<Func<TEntity, bool>>? filter = null
+        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        , string[]? includeProperties = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null
     );
@@ -187,10 +197,11 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <param name="includeProperties">The include properties.</param>        
     /// <param name="rowsToSkip">The rows to skip.</param>
     /// <param name="flags">list fo flags used for query</param>
+    /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<TEntity> FirstOrDefaultAsync(Expression<Func<TEntity, bool>> filter = null
-        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
-        , string[] includeProperties = null
+    Task<TEntity> FirstOrDefaultAsync(Expression<Func<TEntity, bool>>? filter = null
+        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        , string[]? includeProperties = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null
         , CancellationToken cancellationToken = default);
@@ -198,6 +209,7 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <summary>
     /// First or default.
     /// </summary>
+    /// <param name="selector"></param>
     /// <param name="filter">The filter.</param>
     /// <param name="orderBy">The order by.</param>
     /// <param name="includeProperties">The include properties.</param>
@@ -205,25 +217,27 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <param name="flags">list fo flags used for query</param>
     /// <returns></returns>
     TResult FirstOrDefault<TResult>(Expression<Func<TEntity, TResult>> selector
-        , Expression<Func<TEntity, bool>> filter = null
-        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
-        , string[] includeProperties = null
+        , Expression<Func<TEntity, bool>>? filter = null
+        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        , string[]? includeProperties = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null) where TResult : class;
 
     /// <summary>
     /// First or default.
     /// </summary>
+    /// <param name="selector"></param>
     /// <param name="filter">The filter.</param>
     /// <param name="orderBy">The order by.</param>
     /// <param name="includeProperties">The include properties.</param>        
     /// <param name="rowsToSkip">The rows to skip.</param>
     /// <param name="flags">list fo flags used for query</param>
+    /// <param name="cancellationToken"></param>
     /// <returns></returns>
     Task<TResult> FirstOrDefaultAsync<TResult>(Expression<Func<TEntity, TResult>> selector
-        , Expression<Func<TEntity, bool>> filter = null
-        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
-        , string[] includeProperties = null
+        , Expression<Func<TEntity, bool>>? filter = null
+        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        , string[]? includeProperties = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null
         , CancellationToken cancellationToken = default) where TResult : class;
@@ -245,7 +259,8 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <returns>Queryable of type TModel</returns>
     IQueryable<TEntity?> GetQueryable(string[] includeProperties, QueryFlags? flags = null);
 
-    Task<int> ExecuteSqlCommand(string query, IDictionary<string, object> parameters = null, CancellationToken cancellationToken = default);
+    Task<int> ExecuteSqlCommand(string query, IDictionary<string, object>? parameters = null, CancellationToken cancellationToken = default);
+    
     /// <summary>
     /// SQLs the query.
     /// </summary>
@@ -254,13 +269,17 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <param name="parameters">The parameters.</param>
     /// <returns></returns>
     IQueryable<TEntity?> SqlQuery(string query, CommandType cmdType, params object[] parameters);
+
     /// <summary>
-    /// Get entites by run Sql query 
+    /// Get entities by run Sql query 
     /// </summary>
-    /// <param name="sql"></param>
+    /// <param name="queryable"></param>
+    /// <param name="query"></param>
+    /// <param name="cmdType"></param>
     /// <param name="parameters"></param>
     /// <returns></returns>
     IQueryable<TEntity> SqlQuery(IQueryable<TEntity> queryable, string query, CommandType cmdType, params object[] parameters);
+    
     /// <summary>
     /// Properties to be included in Query
     /// </summary>
@@ -270,7 +289,7 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     IQueryable<TEntity?> IncludeProperties(IQueryable<TEntity?> queryable, string[] includeProperties);
 
     /// <summary>
-    /// Set Flags to quary 
+    /// Set Flags to query 
     /// </summary>
     /// <param name="queryable"></param>
     /// <param name="flags"></param>

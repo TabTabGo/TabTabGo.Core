@@ -24,9 +24,11 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
     #region Get
 
     public async virtual Task<PageList<TResult>> GetPageListAsync<TResult>(Func<TEntity, TResult> selector,
-        Expression<Func<TEntity?, bool>> filter = null, int pageNumber = 0,
-        int pageSize = 20, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null,
-        string[] includeProperties = null,
+        Expression<Func<TEntity?, bool>>? filter = null,
+        int pageNumber = 0,
+        int pageSize = 20,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
+        string[]? includeProperties = null,
         QueryFlags? flags = null,
         CancellationToken cancellationToken = new CancellationToken()) where TResult : class
     {
@@ -55,6 +57,7 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
     // <summary>
     /// Gets the queryable.
     /// </summary>
+    /// <param name="selector"></param>
     /// <param name="filter">The filter.</param>
     /// <param name="orderBy">The order by.</param>
     /// <param name="includeProperties">The include properties.</param>
@@ -179,7 +182,7 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
         return await query.ToListAsync(cancellationToken);
     }
 
-    public virtual TEntity? GetByKey(object? key, string[]? includeProperties = null)
+    public virtual TEntity? GetByKey(TKey? key, string[]? includeProperties = null)
     {
         if (includeProperties == null) return _dbSet.Find(key);
         foreach (var property in includeProperties.Where(p => !p.StartsWith("$")).ToArray())
@@ -190,7 +193,7 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
         return _dbSet.Find(key);
     }
 
-    public virtual async Task<TEntity?> GetByKeyAsync(object key, string[]? includeProperties = null,
+    public virtual async Task<TEntity?> GetByKeyAsync(TKey key, string[]? includeProperties = null,
         CancellationToken cancellationToken = default)
     {
         if (includeProperties == null) return await _dbSet.FindAsync(new object[] { key }, cancellationToken);
@@ -206,9 +209,9 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
 
     #region FirstOrDefault
 
-    public virtual TEntity FirstOrDefault(Expression<Func<TEntity, bool>> filter = null
-        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
-        , string[] includeProperties = null, int? rowsToSkip = null
+    public virtual TEntity FirstOrDefault(Expression<Func<TEntity, bool>>? filter = null
+        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        , string[]? includeProperties = null, int? rowsToSkip = null
         , QueryFlags? flags = null)
     {
         var query = GetQueryable<TEntity>(
@@ -222,8 +225,8 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
         return query.FirstOrDefault();
     }
 
-    public virtual Task<TEntity?> FirstOrDefaultAsync(Expression<Func<TEntity, bool>> filter = null
-        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
+    public virtual Task<TEntity?> FirstOrDefaultAsync(Expression<Func<TEntity, bool>>? filter = null
+        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
         , string[] includeProperties = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null

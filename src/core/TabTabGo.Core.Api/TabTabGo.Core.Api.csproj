@@ -10,12 +10,13 @@
     <Copyright>TabTabGo</Copyright>
     <RepositoryUrl>https://github.com/TabTabGo/TabTabGo.Core</RepositoryUrl>
     <PackageTags>ASP.Net Api core</PackageTags>
-    <PackageReleaseNotes>Migrate from TTG.Core.Api</PackageReleaseNotes>
+    <PackageReleaseNotes>Upgrade to .net 8</PackageReleaseNotes>
     <PackageIcon>logo@32.png</PackageIcon>
+    <LangVersion>default</LangVersion>
+    <Version>8.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
   </ItemGroup>
 
@@ -25,6 +26,14 @@
       <PackagePath></PackagePath>
       <Link>logo@32.png</Link>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TabTabGo.Core\TabTabGo.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Controllers\" />
   </ItemGroup>
 
 </Project>

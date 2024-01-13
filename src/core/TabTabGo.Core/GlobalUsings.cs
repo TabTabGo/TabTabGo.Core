@@ -1,5 +1,6 @@
 ﻿global using System.Collections;
 global using System.Reflection;
-global using Newtonsoft.Json;
-global using Newtonsoft.Json.Linq;
+global using System.Text.Json;
+global using System.Text.Json.Serialization;
+global using System.Text.Json.Nodes;
 global using TabTabGo.Core.Entities;

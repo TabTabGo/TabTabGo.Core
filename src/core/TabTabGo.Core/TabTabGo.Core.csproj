@@ -12,14 +12,14 @@
     <PackageIcon>logo@32.png</PackageIcon>
     <RepositoryUrl>https://github.com/TabTabGo/TabTabGo.Core</RepositoryUrl>
     <PackageTags>Core. Utilities, Interfaces </PackageTags>
-    <PackageReleaseNotes>Migrate code from TTG.Core </PackageReleaseNotes>
+    <PackageReleaseNotes>Upgrade to .Net 8</PackageReleaseNotes>
     <LangVersion>default</LangVersion>
+    <Version>8.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.JsonPatch" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
   <ItemGroup>

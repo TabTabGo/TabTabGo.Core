@@ -1,18 +1,12 @@
-﻿using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-
-using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
+﻿using System.Diagnostics;
 using System.Text;
-using System.Threading.Tasks;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 
-namespace TabTabGo.Core.WebApi.Middlewares.Logging.NLog
+namespace TabTabGo.Core.Api.Middlewares.Logging
 {
     //credit: https://gist.github.com/elanderson/c50b2107de8ee2ed856353dfed9168a2
     public class RequestResponseLoggingMiddleware
@@ -77,7 +71,7 @@ namespace TabTabGo.Core.WebApi.Middlewares.Logging.NLog
                     await _next(context);
                 }
                 catch (Exception x)
-               {
+                {
                     //we only come here in prod when DeveloperExceptionPage is not used, to test this comment out this line in startup.cs -->  app.UseDeveloperExceptionPage();
                     ex = x;
                     _logger.LogError(x, $"{context.TraceIdentifier}");
@@ -91,12 +85,12 @@ namespace TabTabGo.Core.WebApi.Middlewares.Logging.NLog
                         isSuccess = 0;
 
                     using (_actionLogger.BeginScope(new[] {
-                    new KeyValuePair<string, object>("TraceType", "Response"),
-                    new KeyValuePair<string, object>("TraceIdentifier", context.TraceIdentifier),
-                    new KeyValuePair<string, object>("StatusCode", context.Response.StatusCode),
-                    new KeyValuePair<string, object>("HeadersJson", GetHeaderJson(context.Response.Headers)),
-                    new KeyValuePair<string, object>("IsSuccess", isSuccess),
-                    new KeyValuePair<string, object>("ProcessTime", stopWatch.Elapsed.TotalMilliseconds.ToString())
+                        new KeyValuePair<string, object>("TraceType", "Response"),
+                        new KeyValuePair<string, object>("TraceIdentifier", context.TraceIdentifier),
+                        new KeyValuePair<string, object>("StatusCode", context.Response.StatusCode),
+                        new KeyValuePair<string, object>("HeadersJson", GetHeaderJson(context.Response.Headers)),
+                        new KeyValuePair<string, object>("IsSuccess", isSuccess),
+                        new KeyValuePair<string, object>("ProcessTime", stopWatch.Elapsed.TotalMilliseconds.ToString())
                 }))
                     {
                         if (ex != null)
@@ -141,16 +135,16 @@ namespace TabTabGo.Core.WebApi.Middlewares.Logging.NLog
             return bodyAsText;
         }
 
-        private string GetHeaderJson(IHeaderDictionary headers)
+        private string? GetHeaderJson(IHeaderDictionary? headers)
         {
             if (headers == null || headers.Count == 0) return null;
 
-            JObject jheader = new JObject();
+            var jHeader = new JsonObject();
 
             foreach (var kv in headers)
-                jheader[kv.Key] = kv.Value.ToString();
+                jHeader[kv.Key] = kv.Value.ToString();
 
-            return JsonConvert.SerializeObject(jheader);
+            return JsonSerializer.Serialize(jHeader, SerializerEngine.JsonSerializationSettings);
         }
     }
 

@@ -1,6 +1,4 @@
-﻿using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
+﻿using System.Text.Json.Serialization;
 using TabTabGo.Core.Extensions;
 
 namespace TabTabGo.Core.Entities
