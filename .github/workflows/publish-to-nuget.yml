@@ -11,7 +11,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
       - name: Publish TabTabGo.Core to NuGet
-        uses: tabtabgo/publish-to-nuget-action@v1.7
+        uses: tabtabgo/publish-to-nuget-action@v1.8
         with:
           project_path: 'src/core/TabTabGo.Core/TabTabGo.Core.csproj'
           package_version: ${GITHUB_REF#refs/*/v}
@@ -19,7 +19,7 @@ jobs:
           nuget_api_key: ${{ secrets.NUGET_API_KEY }}
   
       - name: Publish TabTabGo.Core.Services to NuGet
-        uses: tabtabgo/publish-to-nuget-action@v1.7
+        uses: tabtabgo/publish-to-nuget-action@v1.8
         with:
           project_path: 'src/core/TabTabGo.Core.Services/TabTabGo.Core.Services.csproj'
           package_version: ${GITHUB_REF#refs/*/v}
@@ -27,7 +27,7 @@ jobs:
           nuget_api_key: ${{ secrets.NUGET_API_KEY }}
   
       - name: Publish TabTabGo.Core.Infrastructure to NuGet
-        uses: tabtabgo/publish-to-nuget-action@v1.7
+        uses: tabtabgo/publish-to-nuget-action@v1.8
         with:
           project_path: 'src/core/TabTabGo.Core.Infrastructure/TabTabGo.Core.Infrastructure.csproj'
           package_version: ${GITHUB_REF#refs/*/v}
@@ -35,7 +35,7 @@ jobs:
           nuget_api_key: ${{ secrets.NUGET_API_KEY }}
           
       - name: Publish TabTabGo.Core.Api to NuGet
-        uses: tabtabgo/publish-to-nuget-action@v1.7
+        uses: tabtabgo/publish-to-nuget-action@v1.8
         with:
           project_path: 'src/core/TabTabGo.Core.Api/TabTabGo.Core.Api.csproj'
           package_version: ${GITHUB_REF#refs/*/v}
@@ -43,7 +43,7 @@ jobs:
           nuget_api_key: ${{ secrets.NUGET_API_KEY }}
   
       - name: Publish TabTabGo.Data.EF to NuGet
-        uses: tabtabgo/publish-to-nuget-action@v1.7
+        uses: tabtabgo/publish-to-nuget-action@v1.8
         with:
           project_path: 'src/data/TabTabGo.Data.EF/TabTabGo.Data.EF.csproj'
           package_version: ${GITHUB_REF#refs/*/v}
