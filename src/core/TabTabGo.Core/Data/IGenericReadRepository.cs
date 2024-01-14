@@ -1,10 +1,9 @@
 ﻿using System.Data;
 using System.Linq.Expressions;
-using TabTabGo.Core.Entities;
 using TabTabGo.Core.Enums;
 using TabTabGo.Core.Models;
 
-namespace TabTabGo.Core.Infrastructure.Data;
+namespace TabTabGo.Core.Data;
 
 public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEntity : class
 {
@@ -204,7 +203,7 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <param name="rowsToSkip">The rows to skip.</param>
     /// <param name="flags">list fo flags used for query</param>
     /// <returns></returns>
-    TResult FirstOrDefault<TResult>(Expression<Func<TEntity, TResult>> selector
+    TResult? FirstOrDefault<TResult>(Expression<Func<TEntity, TResult>> selector
         , Expression<Func<TEntity, bool>> filter = null
         , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
         , string[] includeProperties = null
@@ -214,13 +213,15 @@ public interface IGenericReadRepository<TEntity, TKey> : IDisposable where TEnti
     /// <summary>
     /// First or default.
     /// </summary>
+    /// <param name="selector"></param>
     /// <param name="filter">The filter.</param>
     /// <param name="orderBy">The order by.</param>
-    /// <param name="includeProperties">The include properties.</param>        
+    /// <param name="includeProperties">The include properties.</param>
     /// <param name="rowsToSkip">The rows to skip.</param>
     /// <param name="flags">list fo flags used for query</param>
+    /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<TResult> FirstOrDefaultAsync<TResult>(Expression<Func<TEntity, TResult>> selector
+    Task<TResult?> FirstOrDefaultAsync<TResult>(Expression<Func<TEntity, TResult>> selector
         , Expression<Func<TEntity, bool>> filter = null
         , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
         , string[] includeProperties = null

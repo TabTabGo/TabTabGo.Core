@@ -15,10 +15,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\core\TabTabGo.Core.Infrastructure\TabTabGo.Core.Infrastructure.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
       <PackageReference Include="LinqKit" Version="1.2.2" />
       <PackageReference Include="Microsoft.EntityFrameworkCore" Version="6.0.8" />
       <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="6.0.8" />
@@ -30,6 +26,10 @@
         <PackagePath></PackagePath>
         <Link>logo@32.png</Link>
       </None>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\core\TabTabGo.Core\TabTabGo.Core.csproj" />
     </ItemGroup>
 
 </Project>

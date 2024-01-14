@@ -1,8 +1,8 @@
 ﻿using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Linq;
+using TabTabGo.Core.Data;
 using TabTabGo.Core.Extensions;
-using TabTabGo.Core.Infrastructure.Data;
 
 namespace TabTabGo.Data.EF.Repositories
 {
@@ -10,6 +10,7 @@ namespace TabTabGo.Data.EF.Repositories
     /// 
     /// </summary>
     /// <typeparam name="TEntity">The type of the entity.</typeparam>
+    /// <typeparam name="TKey"></typeparam>
     public class GenericRepository<TEntity, TKey> : GenericReadRepository<TEntity, TKey>, IDisposable,
         IGenericRepository<TEntity, TKey> where TEntity : class
     {
@@ -30,12 +31,12 @@ namespace TabTabGo.Data.EF.Repositories
             return _dbSet.AddRangeAsync(items, cancellationToken);
         }
 
-        public virtual TEntity Insert(TEntity entity)
+        public virtual TEntity? Insert(TEntity entity)
         {
             return _dbSet.Add(entity).Entity;
         }
 
-        public virtual async Task<TEntity> InsertAsync(TEntity entity,
+        public virtual async Task<TEntity?> InsertAsync(TEntity entity,
             CancellationToken cancellationToken = default)
         {
             var result = await _dbSet.AddAsync(entity, cancellationToken);
@@ -59,16 +60,16 @@ namespace TabTabGo.Data.EF.Repositories
 
         public virtual void Update(JObject entityToUpdate, Expression<Func<TEntity, bool>> filter)
         {
-            var entities = _dbSet.Where(filter);
+            var entities = _dbSet.Where(filter!);
             foreach (var entity in entities)
             {
-                entityToUpdate.Populate<TEntity>(entity);
+                if (entity != null) entityToUpdate.Populate<TEntity>(entity);
             }
 
             _dbSet.UpdateRange(entities);
         }
 
-        public virtual TEntity Update(TEntity entityToUpdate)
+        public virtual TEntity? Update(TEntity entityToUpdate)
         {
             //var updatedInstance = _dbSet.Attach(entityToUpdate);
             //updatedInstance.State = Microsoft.EntityFrameworkCore.EntityState.Modified;
@@ -82,7 +83,7 @@ namespace TabTabGo.Data.EF.Repositories
             return Task.Run(() => Update(entityToUpdate, filter), cancellationToken);
         }
 
-        public virtual Task<TEntity> UpdateAsync(TEntity entityToUpdate,
+        public virtual Task<TEntity?> UpdateAsync(TEntity entityToUpdate,
             CancellationToken cancellationToken = default)
         {
             return Task.Run(() => Update(entityToUpdate), cancellationToken);
@@ -92,7 +93,7 @@ namespace TabTabGo.Data.EF.Repositories
 
         #region Delete
 
-        public virtual TEntity Delete(object? key)
+        public virtual TEntity? Delete(object? key)
         {
             var entity = GetByKey(key);
 
@@ -101,17 +102,17 @@ namespace TabTabGo.Data.EF.Repositories
 
         public virtual void Delete(Expression<Func<TEntity, bool>> filter)
         {
-            var entities = _dbSet.Where(filter);
+            var entities = _dbSet.Where(filter!);
             Delete(entities);
         }
 
-        public virtual TEntity Delete(TEntity? entityToDelete)
+        public virtual TEntity? Delete(TEntity? entityToDelete)
         {
             var removedEntity = _dbSet.Remove(entityToDelete);
             return removedEntity.Entity;
         }
 
-        public virtual void Delete(IEnumerable<TEntity> entitiesToDelete)
+        public virtual void Delete(IQueryable<TEntity?> entitiesToDelete)
         {
             _dbSet.RemoveRange(entitiesToDelete);
         }

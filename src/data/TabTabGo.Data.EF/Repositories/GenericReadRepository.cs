@@ -2,9 +2,10 @@ using System.Data;
 using System.Linq.Expressions;
 using LinqKit.Core;
 using Microsoft.EntityFrameworkCore;
+using TabTabGo.Core.Data;
 using TabTabGo.Core.Entities;
 using TabTabGo.Core.Enums;
-using TabTabGo.Core.Infrastructure.Data;
+
 using TabTabGo.Core.Models;
 
 namespace TabTabGo.Data.EF.Repositories;
@@ -24,11 +25,11 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
     #region Get
 
     public async virtual Task<PageList<TResult>> GetPageListAsync<TResult>(Func<TEntity, TResult> selector,
-        Expression<Func<TEntity?, bool>> filter = null, int pageNumber = 0,
-        int pageSize = 20, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null,
-        string[] includeProperties = null,
+        Expression<Func<TEntity?, bool>>? filter = null, int pageNumber = 0,
+        int pageSize = 20, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
+        string[]? includeProperties = null,
         QueryFlags? flags = null,
-        CancellationToken cancellationToken = new CancellationToken()) where TResult : class
+        CancellationToken cancellationToken = default) where TResult : class
     {
         var query = GetQueryable(includeProperties, QueryFlags.DisableTracking | flags);
 
@@ -48,13 +49,14 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
             query = query.Take(pageSize);
         var result = query.ToList();
 
-        var listResponse = result.Select(selector).ToList();
+        var listResponse = result.Select(selector!).ToList();
         return new PageList<TResult>(listResponse.ToList(), totalCount, pageSize > 0 ? pageSize : 20, pageNumber);
     }
 
-    // <summary>
+    /// <summary>
     /// Gets the queryable.
     /// </summary>
+    /// <param name="selector"></param>
     /// <param name="filter">The filter.</param>
     /// <param name="orderBy">The order by.</param>
     /// <param name="includeProperties">The include properties.</param>
@@ -240,13 +242,13 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
         return query.FirstOrDefaultAsync(cancellationToken);
     }
 
-    public virtual TResult FirstOrDefault<TResult>(Expression<Func<TEntity, TResult>> selector
+    public virtual TResult? FirstOrDefault<TResult>(Expression<Func<TEntity, TResult>> selector
         , Expression<Func<TEntity, bool>>? filter = null
         , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
         , string[]? includeProperties = null, int? rowsToSkip = null
         , QueryFlags? flags = null) where TResult : class
     {
-        var query = GetQueryable<TResult>(selector: selector
+        IQueryable<TResult?> query = GetQueryable<TResult>(selector: selector
             , filter: filter
             , orderBy: orderBy
             , includeProperties: includeProperties
@@ -257,9 +259,9 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
     }
 
     public virtual Task<TResult?> FirstOrDefaultAsync<TResult>(Expression<Func<TEntity, TResult>> selector
-        , Expression<Func<TEntity, bool>>? filter = null
-        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
-        , string[]? includeProperties = null
+        , Expression<Func<TEntity, bool>> filter = null
+        , Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy = null
+        , string[] includeProperties = null
         , int? rowsToSkip = null
         , QueryFlags? flags = null
         , CancellationToken cancellationToken = default) where TResult : class

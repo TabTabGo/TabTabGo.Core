@@ -7,8 +7,8 @@ using Microsoft.AspNetCore.JsonPatch;
 using System.Reflection;
 using LinqKit;
 using Microsoft.AspNetCore.JsonPatch.Operations;
+using TabTabGo.Core.Data;
 using TabTabGo.Core.Exceptions;
-using TabTabGo.Core.Infrastructure.Data;
 using TabTabGo.Core.ViewModels;
 namespace TabTabGo.Core.Services;
 
@@ -17,8 +17,8 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
 {
     protected readonly IUnitOfWork _unitOfWork;
 
-    public new IGenericRepository<TEntity, TKey> CurrentRepository =>
-        (IGenericRepository<TEntity, TKey>)base.CurrentRepository;
+    public new IGenericRepository<TEntity?, TKey> CurrentRepository =>
+        (IGenericRepository<TEntity?, TKey>)base.CurrentRepository;
 
     public BaseService(IUnitOfWork unitOfWork, IGenericRepository<TEntity, TKey> repository,
         ILogger<BaseService<TEntity, TKey>> logger) : base(repository, logger)
@@ -45,7 +45,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="entity"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public virtual async Task<TEntity> Create(TEntity entity,
+    public virtual async Task<TEntity> Create(TEntity? entity,
         CancellationToken cancellationToken = default)
     {
         if (!IsValidToCreate(entity, out string errorMessage))
@@ -64,7 +64,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="entity"></param>
     /// <param name="validationErrorMessage"></param>
     /// <returns></returns>
-    public virtual bool IsValidToCreate(TEntity entity, out string validationErrorMessage)
+    public virtual bool IsValidToCreate(TEntity? entity, out string validationErrorMessage)
     {
         validationErrorMessage = string.Empty;
         return true;
@@ -81,7 +81,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     {
     }
 
-    protected virtual async Task PreCreate(TEntity entity,
+    protected virtual async Task PreCreate(TEntity? entity,
         CancellationToken cancellationToken = default)
     {
     }
@@ -225,7 +225,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return CurrentEntity;
     }
 
-    public virtual async Task<TEntity> UpdateChanges(TKey id, TEntity entity, CancellationToken cancellationToken)
+    public virtual async Task<TEntity?> UpdateChanges(TKey id, TEntity entity, CancellationToken cancellationToken)
     {
         var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
         if(CurrentEntity == null || !GetKeyPredicate(id).Invoke(CurrentEntity))
@@ -248,7 +248,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="entity"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public virtual async Task<TEntity> Update(TKey id, JsonPatchDocument<TEntity> entity,
+    public virtual async Task<TEntity?> Update(TKey id, JsonPatchDocument<TEntity> entity,
         CancellationToken cancellationToken = default)
     {
         var includeProeprties = GetIncludedProperties(entity, IgnoredProperties);
@@ -279,7 +279,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="entity"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public virtual async Task<TEntity> Update(TKey id, JObject entity,
+    public virtual async Task<TEntity?> Update(TKey id, JObject entity,
         CancellationToken cancellationToken = default)
     {
         var includeProeprties = GetIncludedProperties(entity, IgnoredProperties);
@@ -306,7 +306,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return true;
     }
 
-    public virtual async Task PostUpdate(TEntity entity,
+    public virtual async Task PostUpdate(TEntity? entity,
         CancellationToken cancellationToken = default)
     {
     }
