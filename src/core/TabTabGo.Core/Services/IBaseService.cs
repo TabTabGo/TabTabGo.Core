@@ -14,7 +14,7 @@ public interface IBaseService<TEntity, TKey> :IBaseReadService<TEntity, TKey> wh
     void HandleJsonOperator<T>(Operation operation, object affectedObject);
     #endregion
 
-    Task<TEntity> Create(TEntity entity, CancellationToken cancellationToken = default);
+    Task<TEntity> Create(TEntity? entity, CancellationToken cancellationToken = default);
     Task<TEntity> Delete(TKey id, CancellationToken cancellationToken = default);
     Task<bool> CanDelete(TKey id, CancellationToken cancellationToken = default);
     

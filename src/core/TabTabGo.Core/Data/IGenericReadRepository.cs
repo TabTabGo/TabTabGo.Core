@@ -3,7 +3,7 @@ using System.Linq.Expressions;
 using TabTabGo.Core.Enums;
 using TabTabGo.Core.Models;
 
-namespace TabTabGo.Core.Infrastructure.Data;
+namespace TabTabGo.Core.Data;
 
 public interface IGenericReadRepository<TEntity, in TKey> : IDisposable where TEntity : class
 {
@@ -110,7 +110,6 @@ public interface IGenericReadRepository<TEntity, in TKey> : IDisposable where TE
     /// <summary>
     /// Gets the specified filter.
     /// </summary>
-    /// <param name="selector"></param>
     /// <param name="filter">The filter.</param>
     /// <param name="orderBy">The order by.</param>
     /// <param name="includeProperties">The include properties.</param>
@@ -229,7 +228,7 @@ public interface IGenericReadRepository<TEntity, in TKey> : IDisposable where TE
     /// <param name="selector"></param>
     /// <param name="filter">The filter.</param>
     /// <param name="orderBy">The order by.</param>
-    /// <param name="includeProperties">The include properties.</param>        
+    /// <param name="includeProperties">The include properties.</param>
     /// <param name="rowsToSkip">The rows to skip.</param>
     /// <param name="flags">list fo flags used for query</param>
     /// <param name="cancellationToken"></param>
@@ -259,8 +258,7 @@ public interface IGenericReadRepository<TEntity, in TKey> : IDisposable where TE
     /// <returns>Queryable of type TModel</returns>
     IQueryable<TEntity?> GetQueryable(string[] includeProperties, QueryFlags? flags = null);
 
-    Task<int> ExecuteSqlCommand(string query, IDictionary<string, object>? parameters = null, CancellationToken cancellationToken = default);
-    
+    Task<int> ExecuteSqlCommand(string query, IDictionary<string, object> parameters = null, CancellationToken cancellationToken = default);
     /// <summary>
     /// SQLs the query.
     /// </summary>

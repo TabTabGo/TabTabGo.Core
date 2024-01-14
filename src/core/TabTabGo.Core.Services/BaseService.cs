@@ -1,5 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
 using TabTabGo.Core.Entities;
 using TabTabGo.Core.Extensions;
@@ -8,19 +7,20 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using LinqKit;
 using Microsoft.AspNetCore.JsonPatch.Operations;
+
+using TabTabGo.Core.Data;
 using TabTabGo.Core.Exceptions;
-using TabTabGo.Core.Infrastructure.Data;
 using TabTabGo.Core.ViewModels;
+// ReSharper disable All
 namespace TabTabGo.Core.Services;
 
-[SuppressMessage("ReSharper", "MemberCanBeProtected.Global")]
 public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey>, IBaseService<TEntity, TKey>
     where TEntity : class, IEntity
 {
     protected readonly IUnitOfWork _unitOfWork;
 
-    public new IGenericRepository<TEntity, TKey> CurrentRepository =>
-        (IGenericRepository<TEntity, TKey>)base.CurrentRepository;
+    public new IGenericRepository<TEntity?, TKey> CurrentRepository =>
+        (IGenericRepository<TEntity?, TKey>)base.CurrentRepository;
 
     public BaseService(IUnitOfWork unitOfWork, IGenericRepository<TEntity, TKey> repository,
         ILogger<BaseService<TEntity, TKey>> logger) : base(repository, logger)
@@ -379,7 +379,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             //TODO can be enhanced
             propPath = propPaths[i];
             // TODO Check if the path is number then get index
-            IEnumerable<PropertyInfo?> props = currentObj?.GetType()?.GetProperties()?.Where(p => p.PropertyType.IsPublic);
+            IEnumerable<PropertyInfo?> props = currentObj?.GetType()?.GetProperties()?.Where(p => p.PropertyType.IsPublic)!;
             var propInfo = props?.FirstOrDefault(p => p.Name.Equals(propPath, StringComparison.CurrentCultureIgnoreCase));
             // check if propPath not available in object and children
             if (propInfo != null)
@@ -454,14 +454,14 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return properties.ToArray();
     }
 
-    protected virtual string[] GetIncludedProperties(JsonObject fromClient, params string[]? ignoredProperties)
+    protected virtual string[] GetIncludedProperties(JsonObject fromClient, params string[] ignoredProperties)
     {
         var properties = GetJsonObjectProps(fromClient, "", GetProperties(typeof(TEntity)), ignoredProperties);
         return properties.ToArray();
     }
 
     protected virtual string[] GetIncludedProperties(JsonPatchDocument<TEntity> fromClient,
-        params string[]? ignoredProperties)
+        params string[] ignoredProperties)
     {
         var props = typeof(TEntity).GetProperties();
         var entityProps = props.Where(p => IsReferenceProperty(p.PropertyType)).Select(p => p.Name).ToList();

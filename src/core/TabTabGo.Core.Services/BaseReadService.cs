@@ -7,9 +7,9 @@ using LinqKit;
 using Microsoft.AspNetCore.OData.Query;
 using Microsoft.Extensions.Logging;
 using Microsoft.OData.UriParser;
+using TabTabGo.Core.Data;
 using TabTabGo.Core.Entities;
 using TabTabGo.Core.Enums;
-using TabTabGo.Core.Infrastructure.Data;
 using TabTabGo.Core.Models;
 using TabTabGo.Core.ViewModels;
 
@@ -231,8 +231,8 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
 
     public virtual Task<PageList<TResult>> GetCustomViewModels<TResult>(Func<TEntity, TResult> mapper,
         object oDataQueryOptions,
-        Expression<Func<TEntity, bool>> fixCriteria = null,
-        string[] includeProperties = null, CancellationToken cancellationToken = default)
+        Expression<Func<TEntity, bool>>? fixCriteria = null,
+        string[]? includeProperties = null, CancellationToken cancellationToken = default)
         where TResult : class
     {
         return GetCustomViewModels<TResult>(mapper, oDataQueryOptions as ODataQueryOptions, fixCriteria,
@@ -241,7 +241,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
 
     public virtual Task<PageList<TResult>> GetViewModels<TResult>(object query, Func<TEntity, TResult> mapper,
         Expression<Func<TEntity?, bool>>? fixCriteria = null,
-        string[] includeProperties = null, CancellationToken cancellationToken = default)
+        string[]? includeProperties = null, CancellationToken cancellationToken = default)
         where TResult : class => GetViewModels<TResult>(query as ODataQueryOptions, mapper, fixCriteria,
         includeProperties, cancellationToken);
 
@@ -541,9 +541,12 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     /// <param name="pageSize"></param>
     /// <param name="skip"></param>
     /// <param name="pageNumber"></param>
+    /// <param name="includeProperties"></param>
+    /// <param name="fixCriteria"></param>
+    /// <param name="flags"></param>
     /// <returns></returns>
     public virtual IQueryable<TEntity?> GetQueryable(ODataQueryOptions<TEntity> query, out int pageSize, out int skip,
-        out int pageNumber, string[] includeProperties = null, Expression<Func<TEntity, bool>>? fixCriteria = null, QueryFlags? flags = null)
+        out int pageNumber, string[]? includeProperties = null, Expression<Func<TEntity, bool>>? fixCriteria = null, QueryFlags? flags = null)
     {
         ODataQuerySettings odataSettings;
         (pageSize, skip, pageNumber, odataSettings) = GetOdataProperties(query);
@@ -617,10 +620,10 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     public virtual async Task<DataTable> GetViewModelsDataTable<TResult>(
         ODataQueryOptions<TEntity> query,
         Func<TEntity, TResult> mapper,
-        Expression<Func<TEntity?, bool>> fixCriteria = null,
-        string[] includeProperties = null,
-        IList<DataColumn> columns = null,
-        Func<TResult, IList<DataColumn>, DataRow> getDataRow = null,
+        Expression<Func<TEntity?, bool>>? fixCriteria = null,
+        string[]? includeProperties = null,
+        IList<DataColumn>? columns = null,
+        Func<TResult, IList<DataColumn>, DataRow>? getDataRow = null,
         CancellationToken cancellationToken = default) where TResult : class
     {
         var dbResult = new DataTable(typeof(TEntity).Name);

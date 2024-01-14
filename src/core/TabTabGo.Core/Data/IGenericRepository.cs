@@ -1,8 +1,7 @@
 ﻿using System.Linq.Expressions;
 using System.Text.Json.Nodes;
 
-
-namespace TabTabGo.Core.Infrastructure.Data;
+namespace TabTabGo.Core.Data;
 
 /// <summary>
 /// Generic Repository Interface
@@ -18,12 +17,12 @@ public interface IGenericRepository<TEntity, in TKey> : IGenericReadRepository<T
     /// </summary>Value
     /// <param name="entity">The entity.</param>
     /// <param name="cancellationToken"></param>
-    Task<TEntity> InsertAsync(TEntity entity, CancellationToken cancellationToken = default);
+    Task<TEntity?> InsertAsync(TEntity entity, CancellationToken cancellationToken = default);
     /// <summary>
     /// Inserts the specified entity.
     /// </summary>
     /// <param name="entity">The entity.</param>
-    TEntity Insert(TEntity entity);
+    TEntity? Insert(TEntity entity);
 
     /// <summary>
     /// Bulk add a huge collection of items. The method uses transaction scopes to ensure data integrity
@@ -44,7 +43,7 @@ public interface IGenericRepository<TEntity, in TKey> : IGenericReadRepository<T
     /// Deletes the specified key.
     /// </summary>
     /// <param name="key">The key.</param>
-    TEntity Delete(TKey? key);
+    TEntity? Delete(TKey? key);
     /// <summary>
     /// 
     /// </summary>
@@ -56,13 +55,13 @@ public interface IGenericRepository<TEntity, in TKey> : IGenericReadRepository<T
     /// Deletes the specified entity.
     /// </summary>
     /// <param name="entityToDelete">The entity to delete.</param>
-    TEntity Delete(TEntity? entityToDelete);
+    TEntity? Delete(TEntity? entityToDelete);
 
     /// <summary>
     /// Deletes list of entities.
     /// </summary>
     /// <param name="entitiesToDelete">The entity to delete.</param>
-    void Delete(IEnumerable<TEntity> entitiesToDelete);
+    void Delete(IQueryable<TEntity?> entitiesToDelete);
     #endregion
 
     #region Update
@@ -78,7 +77,7 @@ public interface IGenericRepository<TEntity, in TKey> : IGenericReadRepository<T
     /// </summary>
     /// <param name="entityToUpdate"></param>
     /// <returns></returns>
-    TEntity Update(TEntity entityToUpdate);
+    TEntity? Update(TEntity entityToUpdate);
     /// <summary>
     /// Update List of entities 
     /// </summary>
@@ -99,7 +98,7 @@ public interface IGenericRepository<TEntity, in TKey> : IGenericReadRepository<T
     /// <param name="entityToUpdate"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<TEntity> UpdateAsync(TEntity entityToUpdate, CancellationToken cancellationToken = default);
+    Task<TEntity?> UpdateAsync(TEntity entityToUpdate, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Update List of entities 

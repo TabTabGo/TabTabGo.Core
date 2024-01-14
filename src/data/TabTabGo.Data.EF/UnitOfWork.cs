@@ -4,15 +4,15 @@ using System.Linq.Expressions;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TabTabGo.Core.Data;
 using TabTabGo.Core.Extensions;
-using TabTabGo.Core.Infrastructure.Data;
 using TabTabGo.Data.EF.Repositories;
 
 namespace TabTabGo.Data.EF;
 
-public class UnitOfWork : IUnitOfWork
+public abstract class UnitOfWork : IUnitOfWork
 {
-    protected readonly DbContext _context;
+    protected readonly DbContext? _context;
     protected readonly ILogger _logger;
     protected readonly ConcurrentDictionary<string, object> _repositories = new ConcurrentDictionary<string, object>();
     public UnitOfWork(DbContext context, ILogger<UnitOfWork> logger)
@@ -23,12 +23,12 @@ public class UnitOfWork : IUnitOfWork
 
     public virtual void UpdateState<TEntity>(TEntity entity, EntityState state)
     {
-        _context.Entry(entity).State = state;
+        if (_context != null) _context.Entry(entity).State = state;
     }
 
     public virtual void SetEntityStateModified<TEntiy, TProperty>(TEntiy entity, Expression<Func<TEntiy, TProperty>> propertyExpression) where TEntiy : class where TProperty : class
     {
-        _context.Entry(entity).Reference(propertyExpression).IsModified = true;
+        if (_context != null) _context.Entry(entity).Reference(propertyExpression).IsModified = true;
     }
 
     public virtual void RemoveNavigationProperty<TEntity, TOwnerEntity>(TOwnerEntity ownerEntity, object id)
@@ -37,11 +37,11 @@ public class UnitOfWork : IUnitOfWork
     { 
         try
         {
-            var receiverObjects =ApplyWhere(_context.Set<TEntity>(),ownerEntity.GetType().Name + "Id", id);
+            var receiverObjects =ApplyWhere(_context?.Set<TEntity>(),ownerEntity.GetType().Name + "Id", id);
 
             foreach (TEntity receiverObject in receiverObjects)
             {
-                _context.Set<TEntity>().Remove(receiverObject);
+                _context?.Set<TEntity>().Remove(receiverObject);
             }
         }
         catch (Exception ex)
@@ -51,7 +51,7 @@ public class UnitOfWork : IUnitOfWork
         
     }
 
-    public virtual object? GetChanges()
+    public virtual dynamic? GetChanges()
     {
         throw new NotImplementedException();
     }
@@ -74,29 +74,29 @@ public class UnitOfWork : IUnitOfWork
 
     public virtual void BeginTransaction(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
     {
-        _context.Database.BeginTransaction();
+        _context?.Database.BeginTransaction();
     }
 
     public virtual void Commit()
     {
-        _context.SaveChanges();
-        _context.Database.CommitTransaction();
+        _context?.SaveChanges();
+        _context?.Database.CommitTransaction();
     }
 
     public virtual void Rollback()
     {
-         _context.Database.RollbackTransaction();
+         _context?.Database.RollbackTransaction();
     }
 
     public virtual int SaveChanges()
     {
-        return _context.SaveChanges();
+        return _context?.SaveChanges() ?? 0;
     }
 
-    public virtual async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public virtual Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        using var saveChangeTask = _context.SaveChangesAsync(cancellationToken);
-        return await saveChangeTask;
+        using var saveChangeTask = _context?.SaveChangesAsync(cancellationToken);
+        return saveChangeTask ?? Task.Run( () => 0, cancellationToken);
     }
 
     public virtual Task<int> SaveChangesInBulkAsync(CancellationToken cancellationToken = default)
@@ -104,9 +104,9 @@ public class UnitOfWork : IUnitOfWork
         throw new NotImplementedException();
     }
 
-    public virtual  void AddOrUpdateGraph<TEntiy>(TEntiy entity) where TEntiy : class
+    public virtual  void AddOrUpdateGraph<TEntity>(TEntity entity) where TEntity : class
     {
-        _context.ChangeTracker.TrackGraph(entity, e =>
+        _context?.ChangeTracker.TrackGraph(entity, e =>
         {
             var alreadyTrackedEntity = _context.ChangeTracker.Entries().FirstOrDefault(entry => entry.Entity.Equals(e.Entry.Entity));
             if (alreadyTrackedEntity != null)
@@ -119,7 +119,13 @@ public class UnitOfWork : IUnitOfWork
 
     public virtual void Dispose()
     {
-        _context?.Dispose();
+        // make sure to call connection close if it is open
+        if (_context == null) return;
+        if (_context.Database.GetDbConnection().State == ConnectionState.Open)
+        {
+            _context.Database.CloseConnection();
+        }
+        _context.Dispose();
     }
 
     #region Helper Methods
@@ -133,7 +139,7 @@ public class UnitOfWork : IUnitOfWork
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
     /// <exception cref="NullReferenceException"></exception>
-    private IQueryable<T> ApplyWhere<T>(IQueryable<T> source, string propertyName, object propertyValue)
+    private IQueryable<T> ApplyWhere<T>(IQueryable<T>? source, string propertyName, object propertyValue)
         where T : class
     {
         // 1. Retrieve member access expression

@@ -4,7 +4,7 @@
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <PackageVersion>6.0.0</PackageVersion>
+        <PackageVersion>8.0.0</PackageVersion>
         <Title>TabTabGo Data EF</Title>
         <Authors>TabTabGo</Authors>
         <Description>TabTabGo implemntations for EF infrastructure  </Description>
@@ -17,10 +17,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\core\TabTabGo.Core.Infrastructure\TabTabGo.Core.Infrastructure.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
       <PackageReference Include="LinqKit" Version="1.2.5" />
       <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.0" />
       <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.0" />
@@ -29,9 +25,12 @@
     <ItemGroup>
       <None Include="..\..\..\assets\logo@32.png">
         <Pack>True</Pack>
-        <PackagePath></PackagePath>
         <Link>logo@32.png</Link>
       </None>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\core\TabTabGo.Core\TabTabGo.Core.csproj" />
     </ItemGroup>
 
 </Project>

@@ -115,7 +115,7 @@ public interface IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
     /// <param name="cancellationToken"></param>
     /// <typeparam name="TResult"></typeparam>
     /// <returns></returns>
-    Task<TResult> GetViewModelByKey<TResult>(TKey id,
+    Task<TResult?> GetViewModelByKey<TResult>(TKey id,
         Func<TEntity,TResult> mapper,
         DateTimeOffset? lastUpdatedDate = null,
         string[]? includeProperties = null,
