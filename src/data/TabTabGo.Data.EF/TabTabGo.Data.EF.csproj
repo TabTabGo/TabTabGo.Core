@@ -23,14 +23,13 @@
     </ItemGroup>
 
     <ItemGroup>
-      <None Include="..\..\..\assets\logo@32.png">
-        <Pack>True</Pack>
-        <Link>logo@32.png</Link>
-      </None>
+      <ProjectReference Include="..\..\core\TabTabGo.Core\TabTabGo.Core.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\core\TabTabGo.Core\TabTabGo.Core.csproj" />
+      <Content Include="..\..\..\assets\logo@32.png">
+        <Link>logo@32.png</Link>
+      </Content>
     </ItemGroup>
 
 </Project>
