@@ -28,7 +28,9 @@
 
     <ItemGroup>
       <Content Include="..\..\..\assets\logo@32.png">
-        <Link>logo@32.png</Link>
+          <Pack>True</Pack>
+          <PackagePath></PackagePath>
+          <Link>logo@32.png</Link>
       </Content>
     </ItemGroup>
 
