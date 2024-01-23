@@ -19,13 +19,13 @@ namespace TabTabGo.Core.Country.Services
             _stringLocalizer = stringLocalizer;
         }
 
-        public async Task<Models.Country> GetCountryName(string code, string culture = "en" , CancellationToken cancellationToken = default)
+        public async Task<Models.Country?> GetCountryName(string code, string culture = "en" , CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(code))
             {
                 return null;
             }
-            var country = (await ReadData.GetCountries()).FirstOrDefault(c => c.Alpha2 == code || c.Alpha3 == code);
+            var country = (await ReadData.GetCountries(cancellationToken)).FirstOrDefault(c => c.Alpha2 == code || c.Alpha3 == code);
             if(country is not null && !culture.Equals("en"))
                 country.Name = _stringLocalizer.GetString(code.ToUpper(), culture);
 

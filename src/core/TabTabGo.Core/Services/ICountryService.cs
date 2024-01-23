@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TabTabGo.Core.Models;
 
 namespace TabTabGo.Core.Services
 {
     public interface ICountryService
     {
-        Task<Models.Country> GetCountryName(string code, string culture = "en", CancellationToken cancellationToken = default);
+        Task<Country?> GetCountryName(string code, string culture = "en", CancellationToken cancellationToken = default);
     }
 }

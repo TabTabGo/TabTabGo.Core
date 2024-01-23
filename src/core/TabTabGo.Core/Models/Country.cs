@@ -19,7 +19,7 @@ namespace TabTabGo.Core.Models
         [JsonPropertyName("official_name")]
         public string? OfficialName { get; set; }
 
-        [JsonPropertyName("phone_extension")]
-        public string? PhoneExtension { get; set; }
+        [JsonPropertyName("phone_code")]
+        public string? PhoneCode { get; set; }
     }
 }
