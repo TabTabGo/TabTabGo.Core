@@ -11,12 +11,14 @@
     <PackageIcon>logo@32.png</PackageIcon>
     <PackageTags>Core, Country</PackageTags>
   </PropertyGroup>
-  
   <ItemGroup>
-    <Content Include="..\assets\logo@32.png">
-      <Pack>true</Pack>
+    <None Include="..\..\..\assets\logo@32.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
       <Link>logo@32.png</Link>
-    </Content>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="Data\countries_info.json">
       <Pack>true</Pack>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
