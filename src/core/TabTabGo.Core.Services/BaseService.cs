@@ -34,9 +34,9 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
 
     #region Create Methods
 
-    public virtual void HandleJsonOperator<T>(Operation operation, object affectedObject)
+    public virtual void HandleJsonOperator<T>(Operation operation, T affectedObject)
     {
-        throw new NotImplementedException();
+        HandleJsonOperator(operation, affectedObject);
     }
 
     /// <summary>

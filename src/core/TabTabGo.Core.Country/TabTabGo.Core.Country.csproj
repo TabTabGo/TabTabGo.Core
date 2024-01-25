@@ -4,9 +4,19 @@
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Version>6.0.0</Version>
+    <Title>Country Library</Title>
+    <Authors>TabTabGo</Authors>
+    <Description>a core library return list of country propertoes and required funcationlied </Description>
+    <PackageIcon>logo@32.png</PackageIcon>
+    <PackageTags>Core, Country</PackageTags>
   </PropertyGroup>
   
   <ItemGroup>
+    <Content Include="..\assets\logo@32.png">
+      <Pack>true</Pack>
+      <Link>logo@32.png</Link>
+    </Content>
     <Content Include="Data\countries_info.json">
       <Pack>true</Pack>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
@@ -24,8 +34,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\core\TabTabGo.Core.Services\TabTabGo.Core.Services.csproj" />
-    <ProjectReference Include="..\src\core\TabTabGo.Core\TabTabGo.Core.csproj" />
+    <ProjectReference Include="..\TabTabGo.Core\TabTabGo.Core.csproj" />
   </ItemGroup>
 
 </Project>

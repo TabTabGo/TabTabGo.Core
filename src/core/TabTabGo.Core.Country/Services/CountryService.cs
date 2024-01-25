@@ -19,7 +19,7 @@ namespace TabTabGo.Core.Country.Services
             _stringLocalizer = stringLocalizer;
         }
 
-        public async Task<Models.Country?> GetCountryName(string code, string culture = "en" , CancellationToken cancellationToken = default)
+        public async Task<Models.Country?> GetCountry(string code, string culture = "en" , CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(code))
             {

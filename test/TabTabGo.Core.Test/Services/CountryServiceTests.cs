@@ -1,5 +1,4 @@
-﻿using TabTabGo.Core.Country;
-using TabTabGo.Core.Country.Services;
+﻿
 using TabTabGo.Core.Models;
 using TabTabGo.Core.Services;
 
@@ -20,7 +19,7 @@ public class CountryServiceTests
     public async void TestEnglishNameByAlpha2()
     {
         var code = "AE";
-        var country = await _countryService.GetCountryName(code);
+        var country = await _countryService.GetCountry(code);
         Assert.Equal("United Arab Emirates", country.Name);
         Assert.Equal("784", country.Number);
     }
@@ -28,7 +27,7 @@ public class CountryServiceTests
     public async void TestArabicNameByAlpha2()
     {
         var code = "AE";
-        var country = await _countryService.GetCountryName(code , "ar");
+        var country = await _countryService.GetCountry(code , "ar");
         Assert.Equal("الإمارات العربية المتحدة", country.Name);
         Assert.Equal("784", country.Number);
     }
@@ -36,7 +35,7 @@ public class CountryServiceTests
     public async void TestEnglishNameByAlpha3()
     {
         var code = "ARE";
-        var country = await _countryService.GetCountryName(code);
+        var country = await _countryService.GetCountry(code);
         Assert.Equal("United Arab Emirates", country.Name);
         Assert.Equal("784", country.Number);
     }
@@ -44,7 +43,7 @@ public class CountryServiceTests
     public async void TestArabicNameByAlpha3()
     {
         var code = "ARE";
-        var country = await _countryService.GetCountryName(code, "ar");
+        var country = await _countryService.GetCountry(code, "ar");
         Assert.Equal("الإمارات العربية المتحدة", country.Name);
         Assert.Equal("784", country.Number);
     }

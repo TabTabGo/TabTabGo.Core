@@ -9,6 +9,6 @@ namespace TabTabGo.Core.Services
 {
     public interface ICountryService
     {
-        Task<Country?> GetCountryName(string code, string culture = "en", CancellationToken cancellationToken = default);
+        Task<Country?> GetCountry(string code, string culture = "en", CancellationToken cancellationToken = default);
     }
 }
