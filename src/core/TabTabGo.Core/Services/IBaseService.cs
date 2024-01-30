@@ -11,6 +11,8 @@ public interface IBaseService<TEntity, TKey> :IBaseReadService<TEntity, TKey> wh
     Task<TEntity> UpdateChanges(TKey id, TEntity entity, CancellationToken cancellationToken);
     Task<TEntity> Update(TKey id, JsonPatchDocument<TEntity> entity, CancellationToken cancellationToken = default);
     Task<TEntity> Update(TKey id, JObject entity, CancellationToken cancellationToken = default);
+    
+    void HandleJsonOperator(Operation operation, object affectedObject);
     #endregion
 
     Task<TEntity> Create(TEntity entity, CancellationToken cancellationToken = default);
