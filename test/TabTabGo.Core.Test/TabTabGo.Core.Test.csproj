@@ -28,7 +28,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\core\TabTabGo.Core.Country\TabTabGo.Core.Country.csproj" />
-    <ProjectReference Include="..\..\TabTabGo.Core.Country\TabTabGo.Core.Country.csproj" />
+    <ProjectReference Include="..\..\src\core\TabTabGo.Core.Services\TabTabGo.Core.Services.csproj" />
   </ItemGroup>
 
 </Project>
