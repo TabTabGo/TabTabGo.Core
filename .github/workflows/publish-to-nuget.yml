@@ -41,4 +41,12 @@ jobs:
           package_version: ${GITHUB_REF#refs/*/v}
           package_name: 'TabTabGo.Data.EF'
           nuget_api_key: ${{ secrets.NUGET_API_KEY }}
+          
+      - name: Publish TabTabGo.Core.Country to NuGet
+        uses: tabtabgo/publish-to-nuget-action@v1.7
+        with:
+          project_path: 'src/core/TabTabGo.Core.Country/TabTabGo.Core.Country.csproj'
+          package_version: ${GITHUB_REF#refs/*/v}
+          package_name: 'TabTabGo.Core.Country'
+          nuget_api_key: ${{ secrets.NUGET_API_KEY }}    
   
