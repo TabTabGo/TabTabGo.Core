@@ -7,6 +7,7 @@ using Microsoft.Extensions.Localization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Globalization;
+using System.Reflection;
 using System.Text;
 using File = System.IO.File;
 
@@ -55,36 +56,39 @@ public class JsonStringLocalizer : IStringLocalizer
         if (!string.IsNullOrEmpty(cacheValue))
             return cacheValue;
 
-        var fullFilePath = Path.GetFullPath($"Resources/{cultureInfo.Name}.json");
+        var resourcePath = $"{Assembly.Load("TabTabGo.Core.Country").GetName().Name}.Resources.{cultureInfo.Name}.json";
 
-        if (!File.Exists(fullFilePath))
-            return string.Empty;
-
-
-        var result = GetValueFromJson(key, fullFilePath);
+        var result = GetValueFromJson(key, resourcePath);
 
         if (!string.IsNullOrEmpty(result))
             _distributedCache.SetString(cacheKey, result);
 
         return result;
     }
-    private string GetValueFromJson(string key, string filePath)
+    private string GetValueFromJson(string key, string resourcePath)
     {
-        using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-        using (var streamReader = new StreamReader(fileStream, Encoding.UTF8))
-        using (var jsonTextReader = new JsonTextReader(streamReader))
+        using (var stream = Assembly.Load("TabTabGo.Core.Country").GetManifestResourceStream(resourcePath))
         {
-            var root = _serializer.Deserialize<JToken>(jsonTextReader);
-
-            var tokens = key.Split('.');
-            foreach (var token in tokens)
+            if (stream == null)
             {
-                root = root[token];
-                if (root == null)
-                    return string.Empty;
+                throw new Exception("Resource not found");
             }
-            var result = root.Value<string>();
-            return result;
+
+            using (var streamReader = new StreamReader(stream, Encoding.UTF8))
+            using (var jsonTextReader = new JsonTextReader(streamReader))
+            {
+                var root = _serializer.Deserialize<JToken>(jsonTextReader);
+
+                var tokens = key.Split('.');
+                foreach (var token in tokens)
+                {
+                    root = root[token];
+                    if (root == null)
+                        return string.Empty;
+                }
+                var result = root.Value<string>();
+                return result;
+            }
         }
     }
     private CultureInfo GetCultureInfo(string culture = "en")
