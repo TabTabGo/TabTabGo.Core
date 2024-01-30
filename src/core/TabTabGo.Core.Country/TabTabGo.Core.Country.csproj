@@ -19,14 +19,14 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Data\countries_info.json">
+    <EmbeddedResource Include="Data\countries_info.json">
       <Pack>true</Pack>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Resources\ar-AE.json">
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\ar-AE.json">
       <Pack>true</Pack>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>
