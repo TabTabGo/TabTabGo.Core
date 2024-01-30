@@ -21,7 +21,9 @@
 
   <ItemGroup>
     <PackageReference Include="LinqKit.Core" Version="1.2.5" />
-    <PackageReference Include="Microsoft.AspNetCore.OData" Version="8.2.3" />
+    <PackageReference Include="Microsoft.AspNetCore.OData" Version="8.2.4" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Localization.Abstractions" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
   </ItemGroup>
 
