@@ -27,12 +27,9 @@ namespace TabTabGo.Core.Country.Services
             {
                 return null;
             }
-            var country = (await ReadData.GetCountries(cancellationToken)).FirstOrDefault(c => c.Alpha2 == code || c.Alpha3 == code);
+            var country = (await ReadData.GetCountries(cancellationToken)).FirstOrDefault(c => c.Alpha2 == code.ToUpper() || c.Alpha3 == code.ToUpper());
 
-            if(country == null)
-                throw new TTGException($"Failed to Get Country for code {code}");
-
-            if(!culture.Equals("en"))
+            if(country != null && !culture.Equals("en"))
                 country.Name = _stringLocalizer.GetString(code.ToUpper(), culture);
 
             return country;
