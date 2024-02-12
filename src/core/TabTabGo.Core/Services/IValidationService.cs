@@ -2,7 +2,7 @@ namespace TabTabGo.Core.Services
 {
     public interface IValidationService<in TEntity, in TRequest>
     {
-        ValidationResult Validate(TRequest request);
-        ValidationResult Validate(TEntity request);
+        Task<ValidationResult> Validate(TEntity entity, CancellationToken cancellationToken);
+        Task<ValidationResult> Validate(TRequest entityRequest, CancellationToken cancellationToken);
     }
 }

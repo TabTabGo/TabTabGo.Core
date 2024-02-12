@@ -40,8 +40,8 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     /// </summary>
     protected virtual string[]? IgnoredProperties { get; } = new string[] { };
 
-    protected abstract Expression<Func<TEntity, bool>> GetKeyPredicate(TKey id);
-    protected abstract TKey GetKey(TEntity entity);
+    public abstract Expression<Func<TEntity, bool>> GetKeyPredicate(TKey id);
+    public abstract TKey GetKey(TEntity entity);
 
     public BaseReadService(IGenericReadRepository<TEntity, TKey> repository,
         ILogger<BaseReadService<TEntity, TKey>> logger)

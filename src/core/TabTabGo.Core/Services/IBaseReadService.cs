@@ -147,5 +147,18 @@ public interface IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
         Expression<Func<TEntity, bool>>? fixCriteria = null,
         string[]? includeProperties = null,
         CancellationToken cancellationToken = default) where TResult : class;
+    /// <summary>
+    /// Get the key predicate for the entity
+    /// </summary>
+    /// <param name="id"></param>
+    /// <returns></returns>
+    Expression<Func<TEntity, bool>> GetKeyPredicate(TKey id);
+   
+    /// <summary>
+    /// Get entity key
+    /// </summary>
+    /// <param name="entity"></param>
+    /// <returns></returns>
+    TKey GetKey(TEntity entity);
     
 }
