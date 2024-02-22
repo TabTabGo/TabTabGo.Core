@@ -10,93 +10,110 @@ using TabTabGo.Data.EF.Repositories;
 
 namespace TabTabGo.Data.EF;
 
-public abstract class UnitOfWork : IUnitOfWork
+public abstract class UnitOfWork(DbContext? context, ILogger<UnitOfWork> logger) : IUnitOfWork
 {
-    protected readonly DbContext? _context;
-    protected readonly ILogger _logger;
+    // check if context is null then throw exception
+
     protected readonly ConcurrentDictionary<string, object> _repositories = new ConcurrentDictionary<string, object>();
-    public UnitOfWork(DbContext context, ILogger<UnitOfWork> logger)
-    {
-        _context = context;
-        _logger = logger;
-    }
 
     public virtual void UpdateState<TEntity>(TEntity entity, EntityState state)
     {
-        if (_context != null) _context.Entry(entity).State = state;
+        if (entity != null && context != null)
+            context.Entry(entity).State = state;
     }
 
-    public virtual void SetEntityStateModified<TEntiy, TProperty>(TEntiy entity, Expression<Func<TEntiy, TProperty>> propertyExpression) where TEntiy : class where TProperty : class
+    public virtual void SetEntityStateModified<TEntity, TProperty>(TEntity entity,
+        Expression<Func<TEntity, TProperty>> propertyExpression) where TEntity : class where TProperty : class
     {
-        if (_context != null) _context.Entry(entity).Reference(propertyExpression).IsModified = true;
+        if (context != null) context.Entry(entity).Reference(propertyExpression!).IsModified = true;
     }
 
     public virtual void RemoveNavigationProperty<TEntity, TOwnerEntity>(TOwnerEntity ownerEntity, object id)
         where TEntity : class
         where TOwnerEntity : class
-    { 
+    {
         try
         {
-            var receiverObjects =ApplyWhere(_context?.Set<TEntity>(),ownerEntity.GetType().Name + "Id", id);
+            var receiverObjects = ApplyWhere(context?.Set<TEntity>(), ownerEntity.GetType().Name + "Id", id);
 
             foreach (TEntity receiverObject in receiverObjects)
             {
-                _context?.Set<TEntity>().Remove(receiverObject);
+                context?.Set<TEntity>().Remove(receiverObject);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"Error when trying to remove navigation property. The deletion was not performed");
+            logger.LogError(ex, $"Error when trying to remove navigation property. The deletion was not performed");
         }
-        
     }
 
     public virtual dynamic? GetChanges()
     {
-        throw new NotImplementedException();
+        List<dynamic> result = new List<dynamic>();
+        if (context == null) return result;
+        var changes = context.ChangeTracker.Entries();
+        foreach (var entry in changes)
+        {
+            switch (entry.State)
+            {
+                case EntityState.Modified:
+                    result.Add(new { entry.State, entry.OriginalValues, entry.CurrentValues });
+                    break;
+                case EntityState.Added:
+                    result.Add(new { entry.State, entry.CurrentValues });
+                    break;
+                case EntityState.Deleted:
+                    result.Add(new { entry.State, entry.OriginalValues });
+                    break;
+                case EntityState.Detached:
+                    break;
+                case EntityState.Unchanged:
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        return result;
     }
 
-    public virtual IGenericRepository<TEntity, TKey> Repository<TEntity, TKey>(string? name= null) where TEntity : class
+    public virtual IGenericRepository<TEntity, TKey> Repository<TEntity, TKey>(string? name = null)
+        where TEntity : class
     {
         var entityName = string.IsNullOrEmpty(name) ? typeof(TEntity).FullName : name;
-        if(_repositories.TryGetValue(entityName, out var repository))
+        if (entityName != null && _repositories.TryGetValue(entityName, out var repository))
         {
             return (IGenericRepository<TEntity, TKey>)repository;
         }
-        else
-        {
-            repository = new GenericRepository<TEntity, TKey>(_context);
-            _repositories.TryAdd(entityName, repository);
-            return (IGenericRepository<TEntity, TKey>) repository;
-        }
-        
+        repository = new GenericRepository<TEntity, TKey>(context);
+        if (entityName != null) _repositories.TryAdd(entityName, repository);
+        return (IGenericRepository<TEntity, TKey>)repository;
     }
 
     public virtual void BeginTransaction(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
     {
-        _context?.Database.BeginTransaction();
+        context?.Database.BeginTransaction();
     }
 
     public virtual void Commit()
     {
-        _context?.SaveChanges();
-        _context?.Database.CommitTransaction();
+        context?.SaveChanges();
+        context?.Database.CommitTransaction();
     }
 
     public virtual void Rollback()
     {
-         _context?.Database.RollbackTransaction();
+        context?.Database.RollbackTransaction();
     }
 
     public virtual int SaveChanges()
     {
-        return _context?.SaveChanges() ?? 0;
+        return context?.SaveChanges() ?? 0;
     }
 
     public virtual Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        using var saveChangeTask = _context?.SaveChangesAsync(cancellationToken);
-        return saveChangeTask ?? Task.Run( () => 0, cancellationToken);
+        return context?.SaveChangesAsync(cancellationToken);
     }
 
     public virtual Task<int> SaveChangesInBulkAsync(CancellationToken cancellationToken = default)
@@ -104,15 +121,17 @@ public abstract class UnitOfWork : IUnitOfWork
         throw new NotImplementedException();
     }
 
-    public virtual  void AddOrUpdateGraph<TEntity>(TEntity entity) where TEntity : class
+    public virtual void AddOrUpdateGraph<TEntity>(TEntity entity) where TEntity : class
     {
-        _context?.ChangeTracker.TrackGraph(entity, e =>
+        context?.ChangeTracker.TrackGraph(entity, e =>
         {
-            var alreadyTrackedEntity = _context.ChangeTracker.Entries().FirstOrDefault(entry => entry.Entity.Equals(e.Entry.Entity));
+            var alreadyTrackedEntity = context.ChangeTracker.Entries()
+                .FirstOrDefault(entry => entry.Entity.Equals(e.Entry.Entity));
             if (alreadyTrackedEntity != null)
             {
                 return;
             }
+
             e.Entry.State = e.Entry.IsKeySet ? EntityState.Modified : EntityState.Added;
         });
     }
@@ -120,15 +139,16 @@ public abstract class UnitOfWork : IUnitOfWork
     public virtual void Dispose()
     {
         // make sure to call connection close if it is open
-        if (_context == null) return;
-        if (_context.Database.GetDbConnection().State == ConnectionState.Open)
+        if (context != null && context.Database.GetDbConnection().State == ConnectionState.Open)
         {
-            _context.Database.CloseConnection();
+            context.Database.CloseConnection();
         }
-        _context.Dispose();
+
+        context?.Dispose();
     }
 
     #region Helper Methods
+
     /// <summary>
     /// 
     /// </summary>
@@ -139,7 +159,7 @@ public abstract class UnitOfWork : IUnitOfWork
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
     /// <exception cref="NullReferenceException"></exception>
-    private IQueryable<T> ApplyWhere<T>(IQueryable<T>? source, string propertyName, object propertyValue)
+    private IQueryable<T> ApplyWhere<T>(IQueryable<T> source, string propertyName, object propertyValue)
         where T : class
     {
         // 1. Retrieve member access expression
@@ -147,7 +167,7 @@ public abstract class UnitOfWork : IUnitOfWork
         if (mba == null)
         {
             var ex = new NullReferenceException();
-            _logger.LogError(ex, $"Error when trying to get the property, it doesn't exist");
+            logger.LogError(ex, $"Error when trying to get the property, it doesn't exist");
             throw ex;
         }
 
@@ -163,7 +183,7 @@ public abstract class UnitOfWork : IUnitOfWork
             ex is OverflowException ||
             ex is ArgumentNullException)
         {
-            _logger.LogError(ex, $"Error when trying to convert type of property value with type of property");
+            logger.LogError(ex, $"Error when trying to convert type of property value with type of property");
             throw;
         }
 
@@ -176,15 +196,15 @@ public abstract class UnitOfWork : IUnitOfWork
         // 4. Construct new query
         MethodCallExpression resultExpression = Expression.Call(
             null,
-            GetMethodInfo(Queryable.Where, source, (Expression<Func<T, bool>>)null),
+            GetMethodInfo(Queryable.Where!, source, (Expression<Func<T, bool>>?)null),
             new Expression[] { source.Expression, Expression.Quote(expression) });
         return source.Provider.CreateQuery<T>(resultExpression);
     }
-    
+
     private MethodInfo GetMethodInfo<T1, T2, T3>(Func<T1, T2, T3> f, T1 unused1, T2 unused2)
     {
         return f.Method;
     }
+
     #endregion
-    
 }
