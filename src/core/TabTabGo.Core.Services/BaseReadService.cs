@@ -241,10 +241,10 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     public virtual Task<PageList<TResult>> GetViewModels<TResult>(object query, Func<TEntity, TResult> mapper,
         Expression<Func<TEntity?, bool>>? fixCriteria = null,
         string[] includeProperties = null, CancellationToken cancellationToken = default)
-        where TResult : class => GetViewModels<TResult>(query as ODataQueryOptions, mapper, fixCriteria,
+        where TResult : class => GetViewModelWithOdata<TResult>(query as ODataQueryOptions<TEntity>, mapper, fixCriteria,
         includeProperties, cancellationToken);
 
-    public virtual Task<PageList<TResult>> GetViewModels<TResult>(ODataQueryOptions<TEntity> query,
+    public virtual Task<PageList<TResult>> GetViewModelWithOdata<TResult>(ODataQueryOptions<TEntity> query,
         Func<TEntity, TResult> mapper, Expression<Func<TEntity?, bool>>? fixCriteria = null,
         string[]? includeProperties = null, CancellationToken cancellationToken = default) where TResult : class
     {
