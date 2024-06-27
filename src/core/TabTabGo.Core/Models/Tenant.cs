@@ -1,10 +1,11 @@
 ﻿
 namespace TabTabGo.Core
 {
-    public class Instance
+    public abstract class Tenant<TKey> where TKey : struct
     {
         public string Name { get; set; }
-        public int Id { get; set; }
+        public string Code { get; set; }
+        public TKey Id { get; set; }
 
         public dynamic Settings { get; set; }
         [JsonExtensionData]

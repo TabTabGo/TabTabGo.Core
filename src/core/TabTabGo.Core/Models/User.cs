@@ -1,8 +1,8 @@
 ﻿namespace TabTabGo.Core
 {
-    public class User
+    public abstract class User<TKey> where TKey : struct
     {
         public string Username { get; set; }
-        public object UserId { get; set; }
+        public TKey UserId { get; set; }
     }
 }
