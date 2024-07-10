@@ -32,11 +32,6 @@ public interface ISecurityService<TUserKey, TTenantKey> where TUserKey : struct 
     TUserKey? GetUserId();
     
     /// <summary>
-    /// If login as client then get client Id
-    /// </summary>
-    /// <returns></returns>
-    string? GetClientId();
-    /// <summary>
     /// Get username
     /// </summary>
     string? GetUsername();

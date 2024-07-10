@@ -406,7 +406,7 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     }
 
     /// <summary>
-    /// Popoulate Odata filter to extract custom functions
+    /// Populate Odata filter to extract custom functions
     /// </summary>
     /// <param name="query"></param>
     /// <returns></returns>
