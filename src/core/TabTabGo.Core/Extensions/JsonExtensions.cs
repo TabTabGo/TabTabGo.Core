@@ -119,7 +119,8 @@ public static class JsonExtensions
                 continue;
             }
 
-            if (property.GetCustomAttribute<JsonIgnoreAttribute>() is { Condition: JsonIgnoreCondition.Always })
+            if (property.GetCustomAttribute<JsonIgnoreAttribute>() is { Condition: JsonIgnoreCondition.Always }
+                || property.GetCustomAttribute<Newtonsoft.Json.JsonIgnoreAttribute>() != null)
             {
                 continue;
             }

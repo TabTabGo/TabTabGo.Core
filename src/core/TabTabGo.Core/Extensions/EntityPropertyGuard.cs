@@ -56,7 +56,7 @@ public static class EntityPropertyGuard
         };
         foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (property.GetCustomAttribute<KeyAttribute>() != null || IsNavigation(property.PropertyType))
+            if (property.GetCustomAttribute<KeyAttribute>() != null || IsNavigation(property.PropertyType) || IsHidden(property))
             {
                 names.Add(property.Name);
             }
@@ -64,6 +64,14 @@ public static class EntityPropertyGuard
 
         return names;
     }
+
+    // A property the serializers or the database mapping hide is not part of the client's contract: it is derived, internal or
+    // server-owned state, so a patch must not write it. The extra-properties bag is the one such property that is patched on purpose.
+    private static bool IsHidden(PropertyInfo property) =>
+        property.Name != nameof(IEntity.ExtraProperties)
+        && (property.GetCustomAttribute<System.Text.Json.Serialization.JsonIgnoreAttribute>() is { Condition: System.Text.Json.Serialization.JsonIgnoreCondition.Always }
+            || property.GetCustomAttribute<Newtonsoft.Json.JsonIgnoreAttribute>() != null
+            || property.GetCustomAttribute<System.ComponentModel.DataAnnotations.Schema.NotMappedAttribute>() != null);
 
     private static bool IsNavigation(Type type)
     {

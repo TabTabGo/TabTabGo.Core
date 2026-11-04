@@ -543,4 +543,30 @@ public class BaseServiceTests : ServiceTestBase
         protected override bool IsProtectedProperty(string propertyName) =>
             propertyName.Equals("Tenant", StringComparison.OrdinalIgnoreCase) || base.IsProtectedProperty(propertyName);
     }
+
+    [Theory]
+    [InlineData("/hiddenStj")]
+    [InlineData("/hiddenNewtonsoft")]
+    [InlineData("/hiddenNotMapped")]
+    public void EnsurePatchable_HiddenProperty_IsRejected(string path)
+    {
+        var patch = new Microsoft.AspNetCore.JsonPatch.JsonPatchDocument<Product>(
+            new List<Microsoft.AspNetCore.JsonPatch.Operations.Operation<Product>> { new("replace", path, null, "x") },
+            new Newtonsoft.Json.Serialization.DefaultContractResolver());
+
+        var ex = Assert.Throws<TabTabGo.Core.Exceptions.ApiException>(() => Service.EnsurePatchable(patch));
+
+        Assert.Equal("PROTECTED_PROPERTY", ex.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData("hiddenStj")]
+    [InlineData("hiddenNewtonsoft")]
+    [InlineData("hiddenNotMapped")]
+    public void EnsurePatchable_HiddenPropertyInAJsonObject_IsRejected(string name)
+    {
+        var changes = new System.Text.Json.Nodes.JsonObject { [name] = "x" };
+
+        Assert.Throws<TabTabGo.Core.Exceptions.ApiException>(() => Service.EnsurePatchable(changes));
+    }
 }

@@ -618,4 +618,47 @@ public class ExtensionsTests
         Assert.Throws<ArgumentNullException>(() => EntityPropertyGuard.ProtectedProperties(null!));
         Assert.Throws<ArgumentNullException>(() => EntityPropertyGuard.EnsureExtraPropertyAllowed(null!, "k", 1));
     }
+
+    // --- I4: properties the serializers or the mapping hide are not writable by a patch ---
+
+    private sealed class Hidden : Entity
+    {
+        public string Visible { get; set; } = "v";
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string ByStj { get; set; } = "stj";
+
+        [Newtonsoft.Json.JsonIgnore]
+        public string ByNewtonsoft { get; set; } = "nj";
+
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        public string ByNotMapped { get; set; } = "nm";
+
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? WhenNull { get; set; }
+    }
+
+    [Theory]
+    [InlineData("ByStj", true)]
+    [InlineData("byNewtonsoft", true)]
+    [InlineData("BYNOTMAPPED", true)]
+    [InlineData("Visible", false)]
+    [InlineData("WhenNull", false)] // only "ignore always" hides a property
+    [InlineData("ExtraProperties", false)]
+    public void IsProtected_HiddenProperties(string name, bool expected)
+    {
+        Assert.Equal(expected, EntityPropertyGuard.IsProtected(typeof(Hidden), name));
+    }
+
+    [Fact]
+    public void Populate_NewtonsoftJsonIgnore_IsHonoured()
+    {
+        var entity = new Hidden();
+
+        JsonNode.Parse("{\"visible\":\"changed\",\"byNewtonsoft\":\"x\",\"byStj\":\"x\"}")!.Populate(entity);
+
+        Assert.Equal("changed", entity.Visible);
+        Assert.Equal("nj", entity.ByNewtonsoft);
+        Assert.Equal("stj", entity.ByStj);
+    }
 }

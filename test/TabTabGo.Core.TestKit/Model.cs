@@ -20,6 +20,18 @@ public class Product : Entity
     [Newtonsoft.Json.JsonProperty("tenant_id")]
     public int TenantId { get; set; }
 
+    /// <summary>Hidden from System.Text.Json: server-owned, a patch must not write it.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string HiddenStj { get; set; } = "stj";
+
+    /// <summary>Hidden from Newtonsoft.Json: server-owned, a patch must not write it.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public string HiddenNewtonsoft { get; set; } = "newtonsoft";
+
+    /// <summary>Not a column: derived state a patch must not write.</summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public string HiddenNotMapped { get; set; } = "notmapped";
+
     public int? CategoryId { get; set; }
 
     public Category? Category { get; set; }
