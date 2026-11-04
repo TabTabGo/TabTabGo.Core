@@ -181,7 +181,10 @@ compares the text of the elements: `column.exist('//*[text() = sql:variable("@p0
   * **Retries.** Under a retrying execution strategy a failed attempt is rolled back, the tracker is cleared, and the retry
     reloads the entity inside the scope and applies only the properties the patch changed (no re-attached old object, no
     re-sent concurrency token, no overwrite of a concurrent writer's other columns). `PreUpdate` and `IsValidToUpdate`
-    run again on the retry, so keep them repeatable.
+    run again on the retry, so keep them repeatable. A retry can only rebuild a change made of scalar properties of the
+    patched entity. If the tracker also holds owned types, added, deleted or modified child rows, collection changes, other
+    entities, or a shadow-property change, the retry fails closed: 503 `RETRY_NOT_REPLAYABLE`, nothing is persisted and the
+    client must send the request again (the response never claims a change that was not applied).
   * **Filters are bounded.** `$filter` longer than 4 096 characters or nested deeper than 32 levels answers 400.
 * **Bulk delete** (`EntityControllerBase.DeleteEntities`) accepts at most 500 ids (400 `TOO_MANY_IDS`), looks them up with one
   `IN` list, and checks the scope with one count query.
