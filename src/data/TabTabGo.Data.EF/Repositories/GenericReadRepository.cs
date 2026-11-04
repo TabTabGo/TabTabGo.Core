@@ -521,16 +521,21 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
     public virtual Expression<Func<TEntity, bool>>? GetKeysPredicate(IEnumerable<TKey> keys)
     {
         ArgumentNullException.ThrowIfNull(keys);
-        var keyProperty = SingleKeyProperty();
-        if (keyProperty.ClrType != typeof(TKey))
+        var primaryKey = _dbContext.Model.FindEntityType(typeof(TEntity))?.FindPrimaryKey();
+        if (primaryKey is not { Properties.Count: 1 } || primaryKey.Properties[0].ClrType != typeof(TKey))
         {
+            // a composite key, or a key of another type: one value cannot identify an entity, the caller builds its own predicate
             return null;
         }
 
+        var keyProperty = primaryKey.Properties[0];
+
         var parameter = Expression.Parameter(typeof(TEntity), "e");
         var access = Expression.Call(EfPropertyMethod.MakeGenericMethod(keyProperty.ClrType), parameter, Expression.Constant(keyProperty.Name));
-        var list = keys.Distinct().ToList();
-        var contains = Expression.Call(typeof(Enumerable), nameof(Enumerable.Contains), new[] { typeof(TKey) }, Expression.Constant(list), access);
+        // the list sits behind a member of a constant so EF turns it into a query parameter (a bare constant list is
+        // inlined into the SQL text and every distinct set of keys becomes its own cached query plan)
+        var list = Expression.Property(Expression.Constant(new KeyListHolder(keys.Distinct().ToList())), nameof(KeyListHolder.Keys));
+        var contains = Expression.Call(typeof(Enumerable), nameof(Enumerable.Contains), new[] { typeof(TKey) }, list, access);
         return Expression.Lambda<Func<TEntity, bool>>(contains, parameter);
     }
 
@@ -557,6 +562,8 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
     }
 
     private sealed record KeyHolder(TKey? Value);
+
+    private sealed record KeyListHolder(List<TKey> Keys);
 
     private Microsoft.EntityFrameworkCore.Metadata.IProperty SingleKeyProperty()
     {

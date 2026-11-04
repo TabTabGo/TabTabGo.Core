@@ -410,6 +410,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             throw new ApiException($"Failed to Update {typeof(TEntity).Name} '{id}'. {errorMessage}.", errorNumber: 4002, statusCode: HttpStatusCode.BadRequest);
         await PreUpdate(current, entity, cancellationToken);
         entity.Populate(current, IsProtectedProperty);
+        EnsureExtraPropertiesWithinLimits(current); // the bag is merged key by key above; check what it holds now
         var updatedEntity = await CurrentRepository.UpdateAsync(current, cancellationToken) ?? current;
         await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
         await PostUpdate(updatedEntity, cancellationToken);

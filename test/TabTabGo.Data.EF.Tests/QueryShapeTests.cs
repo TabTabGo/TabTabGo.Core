@@ -144,13 +144,24 @@ public sealed class QueryShapeTests : IDisposable
     }
 
     [Fact]
-    public void GetKeysPredicate_KeyTypeThatDoesNotMatchTheColumn_IsNull_AndCompositeThrows()
+    public async Task GetKeysPredicate_KeysAreQueryParameters_NotInlinedValues()
+    {
+        var predicate = _repo.GetKeysPredicate(new[] { 11, 12, 13 })!;
+
+        await _context.Products.Where(predicate).ToListAsync(Ct);
+
+        // a bare constant list is inlined as "IN (11, 12, 13)": every distinct set of keys is a new query plan
+        Assert.DoesNotContain("11, 12, 13", _capture.Selects.Last());
+    }
+
+    [Fact]
+    public void GetKeysPredicate_KeyTypeThatDoesNotMatchTheColumn_IsNull_AndCompositeIsNull()
     {
         var longRepo = new GenericReadRepository<Product, long>(_context);
         var composite = new GenericReadRepository<CompositeKeyEntity, int>(_context);
 
         Assert.Null(longRepo.GetKeysPredicate(new long[] { 1 }));
-        Assert.Throws<NotSupportedException>(() => composite.GetKeysPredicate(new[] { 1 }));
+        Assert.Null(composite.GetKeysPredicate(new[] { 1 })); // used to throw, which broke bulk delete on composite-key entities
         Assert.Throws<ArgumentNullException>(() => _repo.GetKeysPredicate(null!));
     }
 

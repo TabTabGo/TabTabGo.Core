@@ -150,8 +150,26 @@ compares the text of the elements: `column.exist('//*[text() = sql:variable("@p0
   `PROTECTED_PROPERTY`; names are resolved to the CLR property first, so `tenant_id`, `TENANTID` and `tenantid` are the same
   property). Override `IsProtectedProperty` in your service to protect more, for example a tenant column. Adding extra
   properties is bounded (100 keys, 100-character names, 16 384-character values). After the patch the entity must still
-  be inside `GetFixCriteria`: the service saves inside a transaction, asks the database (so foreign keys count) and rolls back
-  with a 404 when the entity left the scope.
+  be inside `GetFixCriteria`: the service saves inside a transaction (run through the provider's execution strategy, so
+  SQL Server and Npgsql retrying strategies work; `PostUpdate` runs after the commit), asks the database (so foreign keys
+  count) and rolls back with a 404 when the entity left the scope.
+  * **Scope fails closed.** A service whose `UpdateChanges` cannot enforce a scope (the default interface body) answers 500
+    `SCOPE_NOT_ENFORCED` instead of saving outside it. Before the service is called the route also evaluates the scope in
+    memory: a definite "outside" is a 404, a predicate that cannot be evaluated in memory (a navigation that is not loaded)
+    is left to the database check.
+  * **Scope-defining members cannot be patched.** The members `GetFixCriteria` refers to (the tenant column, a navigation and
+    its `<Navigation>Id` foreign key) are rejected with 400 `PROTECTED_PROPERTY` by default; override
+    `IsScopeDefiningProperty` to allow moving entities between scopes.
+  * **Hidden properties are not writable.** A property with `[JsonIgnore]` (System.Text.Json "always" or Newtonsoft) or
+    `[NotMapped]` is protected too; `ExtraProperties` stays patchable, with its limits.
+  * `Update(id, JsonObject)` checks the extra-properties limits on the merged bag, not only per key.
+  * Callers that use `IBaseService.UpdateChanges(id, entity, ct)` or `Update(...)` **directly** (not through the routes) must
+    apply their own scope: only the scoped overload checks it. Likewise bulk delete counts the keys inside the scope and then
+    deletes by key; a row that leaves the scope between the two calls is still deleted. Both are by design of the service layer.
+  * **Bulk keys.** `CountByKeys` and bulk delete build the store's primary-key `IN` list (a query parameter, not inlined);
+    composite keys fall back to one `GetKeyPredicate` per key. Override `PreferServiceKeyPredicate` when your service's
+    `GetKeyPredicate` is not "primary key equals key".
+  * **Filters are bounded.** `$filter` longer than 4 096 characters or nested deeper than 32 levels answers 400.
 * **Bulk delete** (`EntityControllerBase.DeleteEntities`) accepts at most 500 ids (400 `TOO_MANY_IDS`), looks them up with one
   `IN` list, and checks the scope with one count query.
 * Every route requires authorization (`RequireAuthorization()` on the group); there is no PUT.

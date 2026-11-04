@@ -38,7 +38,14 @@ public class TestProductService : BaseService<Product, int>
 
     protected override string[] IgnoredProperties { get; } = new[] { nameof(Product.Category) };
 
-    public override Expression<Func<Product, bool>> GetKeyPredicate(int id) => p => p.Id == id;
+    /// <summary>Replaces the key predicate (a service that looks entities up by something other than the primary key).</summary>
+    public Func<int, Expression<Func<Product, bool>>>? KeyPredicateRule { get; set; }
+
+    public bool PreferServiceKeys { get; set; }
+
+    protected override bool PreferServiceKeyPredicate => PreferServiceKeys;
+
+    public override Expression<Func<Product, bool>> GetKeyPredicate(int id) => KeyPredicateRule?.Invoke(id) ?? (p => p.Id == id);
 
     public override int GetKey(Product entity) => entity.Id;
 

@@ -347,7 +347,7 @@ public interface IGenericReadRepository<TEntity, in TKey> : IDisposable where TE
     /// <summary>
     /// Builds a predicate that matches any of the keys, from the key metadata of the store (a single
     /// <c>IN</c> list, not a tree of <c>OR</c>s). The default implementation returns null, which makes the caller fall
-    /// back to its own key predicate.
+    /// back to its own key predicate. Implementations also return null for a composite key.
     /// </summary>
     /// <param name="keys">The keys</param>
     Expression<Func<TEntity, bool>>? GetKeysPredicate(IEnumerable<TKey> keys) => null;

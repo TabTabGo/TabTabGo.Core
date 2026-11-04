@@ -70,6 +70,12 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
         ?? throw new InvalidOperationException(
             $"{GetType().Name}.GetKeyPredicate returned null and the repository cannot build a key predicate, so a lookup cannot be scoped.");
 
+    /// <summary>
+    /// True makes <see cref="KeysPredicate"/> (bulk delete, <c>CountByKeys</c>) use this service's <c>GetKeyPredicate</c> for every key
+    /// instead of the store's primary-key <c>IN</c> list. Override it when <c>GetKeyPredicate</c> is not "primary key equals key".
+    /// </summary>
+    protected virtual bool PreferServiceKeyPredicate => false;
+
     /// <summary>One predicate for several keys: the store's <c>IN</c> list when it can build one, otherwise an OR of the key predicates.</summary>
     /// <param name="keys">The keys (at most <see cref="MaxBulkKeys"/>)</param>
     /// <exception cref="ApiException">Too many keys (400)</exception>
@@ -81,7 +87,9 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
                 statusCode: System.Net.HttpStatusCode.BadRequest, code: "TOO_MANY_IDS");
         }
 
-        var contains = CurrentRepository.GetKeysPredicate(keys);
+        // the store's list is built on the primary key: a service whose GetKeyPredicate is something else (a lookup by code)
+        // opts out, and a composite key has no list at all
+        var contains = PreferServiceKeyPredicate ? null : CurrentRepository.GetKeysPredicate(keys);
         if (contains != null)
         {
             return contains;

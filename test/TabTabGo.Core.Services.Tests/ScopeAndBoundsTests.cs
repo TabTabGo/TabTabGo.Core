@@ -548,6 +548,27 @@ public class ScopeAndBoundsTests : ServiceTestBase
         public int GetKey(Product entity) => entity.Id;
     }
 
+    [Fact]
+    public async Task CountByKeys_UsesTheStoreInListByDefault()
+    {
+        Service.KeyPredicateRule = id => p => p.Name == "Product 05"; // not "primary key equals id"
+
+        var count = await Service.CountByKeys(new[] { 1, 2 }, null, Ct);
+
+        Assert.Equal(2, count); // the primary-key list ignores the service's predicate
+    }
+
+    [Fact]
+    public async Task CountByKeys_PreferServiceKeyPredicate_UsesTheServicePredicateForEveryKey()
+    {
+        Service.KeyPredicateRule = id => p => p.Name == "Product 05";
+        Service.PreferServiceKeys = true;
+
+        var count = await Service.CountByKeys(new[] { 1, 2 }, null, Ct);
+
+        Assert.Equal(1, count);
+    }
+
     // --- fail closed on scope --------------------------------------------------------------------------------------
 
     [Fact]

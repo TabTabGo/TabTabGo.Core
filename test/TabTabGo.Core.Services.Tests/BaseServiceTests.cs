@@ -293,6 +293,27 @@ public class BaseServiceTests : ServiceTestBase
     }
 
     [Fact]
+    public async Task Update_JsonObject_ExtraPropertiesThatGrowThePersistedBagPastTheLimit_Is400()
+    {
+        // each key is fine on its own; together with what is stored the bag is over the limit (M6)
+        await using (var context = Db.CreateContext())
+        {
+            var stored = context.Products.Find(9)!;
+            for (var i = 0; i < 100; i++)
+            {
+                stored.ExtraProperties["k" + i] = i;
+            }
+
+            await context.SaveChangesAsync(Ct);
+        }
+
+        var ex = await Assert.ThrowsAsync<TabTabGo.Core.Exceptions.ApiException>(() =>
+            Service.Update(9, new JsonObject { ["extraProperties"] = new JsonObject { ["one-more"] = 1 } }, Ct));
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, ex.HttpStatusCode);
+    }
+
+    [Fact]
     public async Task Update_JsonObject_MissingInvalidNull()
     {
         Assert.Equal(HttpStatusCode.NotFound, (await Api(() => Service.Update(999, new JsonObject(), Ct))).HttpStatusCode);

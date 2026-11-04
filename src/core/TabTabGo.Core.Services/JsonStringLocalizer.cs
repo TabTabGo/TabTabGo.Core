@@ -210,7 +210,7 @@ public partial class JsonStringLocalizer : IStringLocalizer, ICultureStringLocal
         return cultures.ToArray();
     }
 
-    private string EmbeddedPrefix() => $"{_assembly!.GetName().Name}.Resources.";
+    private string EmbeddedPrefix() => $"{_assembly!.GetName().Name}.Resources."; // justified: only reached when the service was created with an assembly (embedded mode)
 
     private FrozenDictionary<string, string>? Load(string? culture)
     {
