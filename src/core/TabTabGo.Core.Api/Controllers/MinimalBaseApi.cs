@@ -277,7 +277,6 @@ public static class SetupEntityRouters
         group.MapPatch("{id}", async Task<Results<Ok<object>, BadRequest<ApiErrorBody>, NotFound<ApiErrorBody>, JsonHttpResult<ApiErrorBody>>> (
             HttpContext http,
             TKey id,
-            JsonPatchDocument<TEntity> changes,
             [FromServices] IBaseService<TEntity, TKey> service,
             [FromServices] ILogger<TEntity> logger,
             [FromServices] IMapper<TEntity, TViewModel>? mapper,
@@ -289,6 +288,13 @@ public static class SetupEntityRouters
             if (id == null || EqualityComparer<TKey>.Default.Equals(id, default!))
             {
                 return TypedResults.BadRequest(ApiErrorResponses.Failure("Invalid Id", "Invalid_Id".ToUpperInvariant(), http));
+            }
+
+            // JsonPatchDocument<T> is a Newtonsoft type that System.Text.Json cannot bind, so the body is read here
+            var changes = await ReadPatchDocumentAsync<TEntity>(http.Request, cancellationToken);
+            if (changes == null)
+            {
+                return TypedResults.BadRequest(ApiErrorResponses.Failure("Invalid patch document", "INVALID_PATCH_DOCUMENT", http));
             }
 
             // looked up inside the scope: an entity outside the scope is a 404, as on GET
@@ -379,6 +385,20 @@ public static class SetupEntityRouters
         });
 
         return app;
+    }
+
+    private static async Task<JsonPatchDocument<T>?> ReadPatchDocumentAsync<T>(HttpRequest request, CancellationToken cancellationToken) where T : class
+    {
+        try
+        {
+            using var reader = new StreamReader(request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+            var text = await reader.ReadToEndAsync(cancellationToken);
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<JsonPatchDocument<T>>(text);
+        }
+        catch (Newtonsoft.Json.JsonException)
+        {
+            return null;
+        }
     }
 
     private static JsonHttpResult<ApiErrorBody> Failure(ApiException exception, HttpContext http) =>

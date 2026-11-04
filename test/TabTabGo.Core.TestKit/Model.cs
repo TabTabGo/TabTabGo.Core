@@ -29,6 +29,7 @@ public class Category : Entity
 
     public string Name { get; set; } = string.Empty;
 
+    [System.Text.Json.Serialization.JsonIgnore]
     public List<Product> Products { get; set; } = new();
 }
 
