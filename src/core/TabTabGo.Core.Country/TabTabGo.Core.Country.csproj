@@ -1,41 +1,26 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <Version>8.0.0</Version>
-    <Title>Country Library</Title>
-    <Authors>TabTabGo</Authors>
-    <Description>a core library return list of country propertoes and required funcationlied </Description>
-    <PackageIcon>logo@32.png</PackageIcon>
-    <PackageTags>Core, Country</PackageTags>
+    <Title>TabTabGo Country library</Title>
+    <Description>Country data (ISO codes, names in English and Arabic) and the country service.</Description>
+    <PackageTags>core;country</PackageTags>
   </PropertyGroup>
+
   <ItemGroup>
-    <None Include="..\..\..\assets\logo@32.png">
-      <Pack>True</Pack>
-      <PackagePath></PackagePath>
-      <Link>logo@32.png</Link>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Data\countries_info.json">
-      <Pack>true</Pack>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\ar-AE.json">
-      <Pack>true</Pack>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </EmbeddedResource>
+    <EmbeddedResource Include="Data\countries_info.json" CopyToOutputDirectory="Always" />
+    <EmbeddedResource Include="Resources\ar-AE.json" CopyToOutputDirectory="Always" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Localization" Version="8.0.1" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Localization.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\TabTabGo.Core\TabTabGo.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TabTabGo.Core.Country.Tests" />
   </ItemGroup>
 
 </Project>

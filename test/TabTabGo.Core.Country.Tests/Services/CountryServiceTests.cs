@@ -16,7 +16,7 @@ public class CountryServiceTests
         _countryService = factory.GetRequiredService<ICountryService>();
     }
     [Fact]
-    public async void TestEnglishNameByAlpha2()
+    public async Task TestEnglishNameByAlpha2()
     {
         var code = "AE";
         var country = await _countryService.GetCountry(code);
@@ -24,7 +24,7 @@ public class CountryServiceTests
         Assert.Equal("784", country.Number);
     }
     [Fact]
-    public async void TestArabicNameByAlpha2()
+    public async Task TestArabicNameByAlpha2()
     {
         var code = "AE";
         var country = await _countryService.GetCountry(code , "ar");
@@ -32,7 +32,7 @@ public class CountryServiceTests
         Assert.Equal("784", country.Number);
     }
     [Fact]
-    public async void TestEnglishNameByAlpha3()
+    public async Task TestEnglishNameByAlpha3()
     {
         var code = "ARE";
         var country = await _countryService.GetCountry(code);
@@ -40,7 +40,7 @@ public class CountryServiceTests
         Assert.Equal("784", country.Number);
     }
     [Fact]
-    public async void TestArabicNameByAlpha3()
+    public async Task TestArabicNameByAlpha3()
     {
         var code = "ARE";
         var country = await _countryService.GetCountry(code, "ar");

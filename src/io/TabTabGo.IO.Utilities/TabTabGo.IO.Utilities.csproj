@@ -1,9 +1,13 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-    </PropertyGroup>
+  <PropertyGroup>
+    <Title>TabTabGo IO Utilities</Title>
+    <Description>File and path helpers (temp files, unique file names, safe delete).</Description>
+    <PackageTags>io;files;utilities</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TabTabGo.IO.Utilities.Tests" />
+  </ItemGroup>
 
 </Project>
