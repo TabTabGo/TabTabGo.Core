@@ -284,6 +284,60 @@ public class EntityControllerBaseTests
         Assert.True(other > 0);
     }
 
+    // --- H3: a scope over a navigation must not be evaluated in memory ---
+
+    private static void ServiceWithoutIncludes(IServiceCollection services) =>
+        services.AddScoped<TabTabGo.Core.Services.IBaseService<Product, int>>(sp =>
+            new TestProductService(sp.GetRequiredService<TabTabGo.Core.Data.IUnitOfWork>(),
+                sp.GetRequiredService<ILogger<TabTabGo.Core.Services.BaseService<Product, int>>>()) { IncludeCategory = false });
+
+    [Fact]
+    public async Task Controller_PatchWithANavigationScope_AndNoIncludes_Works()
+    {
+        await using var app = await Start(services: ServiceWithoutIncludes);
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"/name\",\"value\":\"nav\"}]"), category: "Hardware"), Ct); // NullReferenceException (500) before
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        Assert.Equal("nav", fresh.Products.Find(2)!.Name);
+    }
+
+    [Fact]
+    public async Task Controller_PatchJsonWithANavigationScope_AndNoIncludes_Works()
+    {
+        await using var app = await Start(services: ServiceWithoutIncludes);
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/json/2",
+            Json("{\"name\":\"nav-json\"}"), category: "Hardware"), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Controller_PatchWithANavigationScope_OutsideIt_Is404()
+    {
+        await using var app = await Start(services: ServiceWithoutIncludes);
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"/name\",\"value\":\"x\"}]"), category: "Nope"), Ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task MinimalApi_PatchWithANavigationScope_AndNoIncludes_Works()
+    {
+        await using var app = await TestApp.StartAsync(options: o => o.GetFixCriteria = p => p.Category!.Name == "Hardware",
+            services: ServiceWithoutIncludes);
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2",
+            Json("[{\"op\":\"replace\",\"path\":\"/name\",\"value\":\"nav\"}]", "application/json-patch+json")), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     // --- patch ---------------------------------------------------------------------------------------------------
 
     [Fact]

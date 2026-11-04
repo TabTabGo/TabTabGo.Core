@@ -288,19 +288,14 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
             // the operations add up in the entity's own bag: check the result, not each operation
             _currentService.EnsureExtraPropertiesWithinLimits(entity);
 
-            // the patch must not move the entity out of the scope it was found in; nothing is saved
-            if (OutOfScope(entity))
-            {
-                return (NotFoundEntity(id), null);
-            }
-
             var validationResult = _validateService != null ? await _validateService.Validate(entity, cancellationToken) : null;
             if (validationResult is { IsValid: false })
             {
                 return (BadRequestBody("Invalid patch request", "INVALID_PATCH_REQUEST", validationResult), null);
             }
 
-            // saved inside a transaction that the database scope check can veto (foreign keys and navigations count there)
+            // saved inside a transaction that the database scope check can veto (foreign keys and navigations count there);
+            // the scope is never evaluated in memory: a predicate over a navigation that is not loaded would throw
             await _currentService.UpdateChanges(id, entity, GetFixCriteria, cancellationToken);
 
             return (null, entity);
@@ -316,12 +311,6 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
             return (Error(HttpStatusCode.InternalServerError,
                 ApiErrorResponses.Failure($"Failed to update {EntityName}.", "UPDATE_ENTITY_FAILED", HttpContext)), null);
         }
-    }
-
-    private bool OutOfScope(TEntity entity)
-    {
-        var scope = GetFixCriteria;
-        return scope != null && !scope.Compile()(entity);
     }
 
     private static bool IsDefaultKey(TKey id) => id == null || EqualityComparer<TKey>.Default.Equals(id, default!); // justified: a key of a generic type; default is the unset value the comparison wants
@@ -376,12 +365,6 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
 
             _currentService.ApplyJson(changes, entity);
             _currentService.EnsureExtraPropertiesWithinLimits(entity);
-
-            // the patch must not move the entity out of the scope it was found in; nothing is saved
-            if (OutOfScope(entity))
-            {
-                return NotFoundEntity(id);
-            }
 
             var validationResult = _validateService != null ? await _validateService.Validate(entity, cancellationToken) : null;
             if (validationResult is { IsValid: false })

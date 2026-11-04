@@ -74,6 +74,13 @@ public class TestProductsController(
 {
     private Expression<Func<Product, bool>>? Scope()
     {
+        var category = Request.Headers["X-Category"].ToString();
+        if (!string.IsNullOrEmpty(category))
+        {
+            // a scope over a navigation: evaluated in memory it needs the navigation loaded
+            return p => p.Category!.Name == category;
+        }
+
         var tenant = Request.Headers["X-Tenant"].ToString();
         return string.IsNullOrEmpty(tenant) ? null : p => p.Tenant == tenant;
     }
@@ -210,7 +217,7 @@ public sealed class TestApp : IAsyncDisposable
         return new TestApp(app, db, logs);
     }
 
-    public HttpRequestMessage Request(HttpMethod method, string url, HttpContent? content = null, string? user = "tester", string? tenant = null)
+    public HttpRequestMessage Request(HttpMethod method, string url, HttpContent? content = null, string? user = "tester", string? tenant = null, string? category = null)
     {
         var request = new HttpRequestMessage(method, url) { Content = content };
         if (user != null)
@@ -221,6 +228,11 @@ public sealed class TestApp : IAsyncDisposable
         if (tenant != null)
         {
             request.Headers.Add("X-Tenant", tenant);
+        }
+
+        if (category != null)
+        {
+            request.Headers.Add("X-Category", category);
         }
 
         return request;

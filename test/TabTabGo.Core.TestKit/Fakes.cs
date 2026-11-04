@@ -25,7 +25,10 @@ public class TestProductService : BaseService<Product, int>
 
     public Func<Product, string?> UpdateRule { get; set; } = _ => null;
 
-    protected override string[] IncludeProperties => new[] { nameof(Product.Category) };
+    /// <summary>False leaves the navigations unloaded, as a service that overrides <c>IncludeProperties</c> with nothing does.</summary>
+    public bool IncludeCategory { get; set; } = true;
+
+    protected override string[] IncludeProperties => IncludeCategory ? new[] { nameof(Product.Category) } : Array.Empty<string>();
 
     protected override string[] IgnoredProperties { get; } = new[] { nameof(Product.Category) };
 

@@ -136,7 +136,6 @@ public static class SetupEntityRouters
         setEntityRouteOptions?.Invoke(options);
 
         var entityName = typeof(TEntity).Name;
-        var getScope = options.GetFixCriteria?.Compile();
         var root = "/" + options.GetRoutePrefix() + controllerName.Trim('/');
         var group = app.MapGroup(root).WithTags(entityName).RequireAuthorization();
 
@@ -321,12 +320,6 @@ public static class SetupEntityRouters
                 // the operations add up in the entity's own bag: check the result, not each operation
                 service.EnsureExtraPropertiesWithinLimits(entity);
 
-                // the patch must not move the entity out of the scope it was found in; nothing is saved
-                if (getScope != null && !getScope(entity))
-                {
-                    return TypedResults.NotFound(ApiErrorResponses.NotFound(entityName, id, http));
-                }
-
                 var validationResult = validateService != null
                     ? await validateService.Validate(entity, cancellationToken)
                     : null;
@@ -335,7 +328,8 @@ public static class SetupEntityRouters
                     return TypedResults.BadRequest(ApiErrorResponses.Validation("Invalid patch request", "Invalid_Patch_Request".ToUpperInvariant(), validationResult, http));
                 }
 
-                // saved inside a transaction that the database scope check can veto (foreign keys and navigations count there)
+                // saved inside a transaction that the database scope check can veto (foreign keys and navigations count there);
+                // the scope is never evaluated in memory: a predicate over a navigation that is not loaded would throw
                 var updated = await service.UpdateChanges(id, entity, options.GetFixCriteria, cancellationToken);
                 var entityViewModel = mapper?.MapToViewModel(updated);
                 return TypedResults.Ok<object>(entityViewModel != null ? entityViewModel : updated);
