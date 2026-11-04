@@ -120,4 +120,36 @@ public interface IUnitOfWork : IDisposable
     /// True while a transaction is open. The default implementation returns false.
     /// </summary>
     bool HasActiveTransaction => false;
+
+    /// <summary>
+    /// Runs <paramref name="operation"/> and commits it as one unit; rolls back and rethrows when it fails. Providers
+    /// with a retrying execution strategy override this so the whole unit (begin, operation, commit) is what is retried.
+    /// When a transaction is already open the operation just runs inside it and the owner of that transaction commits.
+    /// The default implementation uses <see cref="BeginTransactionAsync"/>, <see cref="CommitAsync"/> and <see cref="RollbackAsync"/>.
+    /// </summary>
+    /// <typeparam name="T">Result type</typeparam>
+    /// <param name="operation">The work; it may run more than once under a retrying strategy, so it must be repeatable</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    async Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        if (HasActiveTransaction)
+        {
+            return await operation(cancellationToken).ConfigureAwait(false);
+        }
+
+        await BeginTransactionAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var result = await operation(cancellationToken).ConfigureAwait(false);
+            await CommitAsync(cancellationToken).ConfigureAwait(false);
+            return result;
+        }
+        catch
+        {
+            // this method began the transaction, so it rolls it back whatever HasActiveTransaction reports
+            await RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+    }
 }

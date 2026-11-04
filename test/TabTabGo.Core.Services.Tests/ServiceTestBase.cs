@@ -7,9 +7,9 @@ namespace TabTabGo.Core.Services.Tests;
 /// <summary>Gives a test class a seeded SQLite database, a unit of work and a product service.</summary>
 public abstract class ServiceTestBase : IDisposable
 {
-    protected ServiceTestBase(bool seed = true)
+    protected ServiceTestBase(bool seed = true, bool retrying = false)
     {
-        Db = new SqliteFixture();
+        Db = new SqliteFixture(retrying);
         if (seed)
         {
             Db.Seed();

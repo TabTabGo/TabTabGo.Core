@@ -11,8 +11,15 @@ public sealed class SqliteFixture : IDisposable
 {
     private readonly SqliteConnection _connection;
 
-    public SqliteFixture()
+    private readonly bool _retrying;
+
+    /// <param name="retrying">
+    /// Registers a retrying execution strategy, like SQL Server or Npgsql do in production: a transaction opened by hand
+    /// outside <c>CreateExecutionStrategy().ExecuteAsync</c> then throws.
+    /// </param>
+    public SqliteFixture(bool retrying = false)
     {
+        _retrying = retrying;
         _connection = new SqliteConnection("DataSource=:memory:");
         _connection.Open();
         using var context = CreateContext();
@@ -23,7 +30,14 @@ public sealed class SqliteFixture : IDisposable
 
     public TestDbContext CreateContext(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
     {
-        var builder = new DbContextOptionsBuilder<TestDbContext>().UseSqlite(_connection);
+        var builder = new DbContextOptionsBuilder<TestDbContext>()
+            .UseSqlite(_connection, o =>
+            {
+                if (_retrying)
+                {
+                    o.ExecutionStrategy(d => new RetryingStrategy(d));
+                }
+            });
         if (interceptors.Length > 0)
         {
             builder.AddInterceptors(interceptors);

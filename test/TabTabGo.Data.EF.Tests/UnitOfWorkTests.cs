@@ -234,6 +234,90 @@ public class UnitOfWorkTests : IDisposable
         Assert.Equal(-1, await uow.SaveChangesInBulkAsync(Ct));
     }
 
+    [Fact]
+    public async Task ExecuteInTransactionAsync_Success_CommitsTheWork()
+    {
+        var result = await _uow.ExecuteInTransactionAsync(async ct =>
+        {
+            _context.Products.Add(new Product { Name = "tx-added", Tenant = "A" });
+            await _uow.SaveChangesAsync(ct);
+            Assert.True(_uow.HasActiveTransaction);
+            return 7;
+        }, Ct);
+
+        Assert.Equal(7, result);
+        Assert.False(_uow.HasActiveTransaction);
+        await using var fresh = _db.CreateContext();
+        Assert.Equal(1, fresh.Products.Count(p => p.Name == "tx-added"));
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_Failure_RollsBackAndRethrows()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _uow.ExecuteInTransactionAsync<int>(async ct =>
+        {
+            _context.Products.Add(new Product { Name = "tx-failed", Tenant = "A" });
+            await _uow.SaveChangesAsync(ct);
+            throw new InvalidOperationException("boom");
+        }, Ct));
+
+        Assert.False(_uow.HasActiveTransaction);
+        await using var fresh = _db.CreateContext();
+        Assert.Equal(0, fresh.Products.Count(p => p.Name == "tx-failed"));
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_InsideAnOpenTransaction_LeavesTheCommitToTheOwner()
+    {
+        await _uow.BeginTransactionAsync(cancellationToken: Ct);
+
+        await _uow.ExecuteInTransactionAsync(ct =>
+        {
+            _context.Products.Add(new Product { Name = "tx-outer", Tenant = "A" });
+            return _uow.SaveChangesAsync(ct);
+        }, Ct);
+
+        Assert.True(_uow.HasActiveTransaction);
+        await _uow.RollbackAsync(Ct);
+        await using var fresh = _db.CreateContext();
+        Assert.Equal(0, fresh.Products.Count(p => p.Name == "tx-outer"));
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_NullOperation_Throws()
+    {
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _uow.ExecuteInTransactionAsync<int>(null!, Ct));
+    }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_TransientFailure_RetriesTheWholeUnitAndCommitsOnce()
+    {
+        using var db = new SqliteFixture(retrying: true);
+        db.Seed();
+        await using var context = db.CreateContext();
+        var uow = new TestUnitOfWork(context);
+        var attempts = 0;
+
+        await uow.ExecuteInTransactionAsync(async ct =>
+        {
+            attempts++;
+            context.ChangeTracker.Clear(); // a repeatable operation starts from a clean tracker, as EF documents for retries
+            context.Products.Add(new Product { Name = "retried", Tenant = "A" });
+            await uow.SaveChangesAsync(ct);
+            if (attempts == 1)
+            {
+                throw new TransientTestException();
+            }
+
+            return attempts;
+        }, Ct);
+
+        Assert.Equal(2, attempts);
+        await using var fresh = db.CreateContext();
+        // the first attempt was rolled back, so the row exists once
+        Assert.Equal(1, fresh.Products.Count(p => p.Name == "retried"));
+    }
+
     private sealed class Sut(DbContext context, Microsoft.Extensions.Logging.ILogger<UnitOfWork> logger) : UnitOfWork(context, logger);
 
     private sealed class BulkUow(DbContext context) : UnitOfWork(context, NullLogger<UnitOfWork>.Instance)

@@ -16,6 +16,9 @@ public class TestProductService : BaseService<Product, int>
     /// <summary>Messages recorded by the hooks, in call order.</summary>
     public List<string> Calls { get; } = new();
 
+    /// <summary>Runs inside <c>PostUpdate</c>, for tests that look at what is committed at that moment.</summary>
+    public Action<Product>? PostUpdateHook { get; set; }
+
     public Func<Product, string?> DeleteRule { get; set; } = _ => null;
 
     public Func<Product, string?> CreateRule { get; set; } = _ => null;
@@ -69,6 +72,7 @@ public class TestProductService : BaseService<Product, int>
     public override Task PostUpdate(Product entity, CancellationToken cancellationToken = default)
     {
         Calls.Add("PostUpdate");
+        PostUpdateHook?.Invoke(entity);
         return Task.CompletedTask;
     }
 
@@ -216,6 +220,9 @@ public class MinimalReadRepository : IGenericReadRepository<Product, int>
 public class MinimalUnitOfWork : IUnitOfWork
 {
     public List<string> Calls { get; } = new();
+
+    /// <summary>What <see cref="IUnitOfWork.HasActiveTransaction"/> reports (false unless a test sets it).</summary>
+    public bool HasActiveTransaction { get; set; }
 
     public IGenericRepository<TEntity, TKey> Repository<TEntity, TKey>(string? name = null) where TEntity : class => throw new NotSupportedException();
 

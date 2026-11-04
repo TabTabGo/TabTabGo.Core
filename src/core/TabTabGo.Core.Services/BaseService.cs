@@ -306,6 +306,41 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <exception cref="ApiException"></exception>
     public virtual async Task<TEntity> UpdateChanges(TKey id, TEntity entity, CancellationToken cancellationToken)
     {
+        var updated = await UpdateChangesCore(id, entity, null, cancellationToken);
+        await PostUpdate(updated, cancellationToken);
+        return updated;
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<TEntity> UpdateChanges(TKey id, TEntity entity, Expression<Func<TEntity, bool>>? scope,
+        CancellationToken cancellationToken)
+    {
+        if (scope == null)
+        {
+            return await UpdateChanges(id, entity, cancellationToken);
+        }
+
+        // Save inside a transaction, ask the database whether the entity is still in scope (foreign keys and
+        // navigations count there) and roll everything back when it is not. The unit of work runs the whole unit
+        // through the provider's execution strategy, so retrying strategies (SQL Server, Npgsql) work too.
+        // PostUpdate runs after the commit: a side effect must not fire for a change that can still be rolled back.
+        var updated = await _unitOfWork.ExecuteInTransactionAsync(
+            ct => UpdateChangesCore(id, entity, scope, ct), cancellationToken);
+        await PostUpdate(updated, cancellationToken);
+        return updated;
+    }
+
+    /// <summary>
+    /// The update without <c>PostUpdate</c>: load, validate, <c>PreUpdate</c>, save and, when a scope is
+    /// given, check in the database that the entity is still inside it.
+    /// </summary>
+    /// <param name="id">Entity identifier</param>
+    /// <param name="entity">Updated object</param>
+    /// <param name="scope">Scope the entity must still satisfy after the save, or null</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    protected virtual async Task<TEntity> UpdateChangesCore(TKey id, TEntity entity,
+        Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+    {
         var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
         var current = CurrentEntity != null && EqualityComparer<TKey>.Default.Equals(GetKey(CurrentEntity), id)
             ? CurrentEntity
@@ -317,55 +352,9 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
 
         var updatedEntity = await CurrentRepository.UpdateAsync(current, cancellationToken) ?? current;
         await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
-        if (_scopeAfterSave != null && !await StillInScopeAsync(id, _scopeAfterSave, cancellationToken))
+        if (scope != null && !await StillInScopeAsync(id, scope, cancellationToken))
             throw NotFound(id);
-        await PostUpdate(updatedEntity, cancellationToken);
         return updatedEntity;
-    }
-
-    private Expression<Func<TEntity, bool>>? _scopeAfterSave;
-
-    /// <inheritdoc />
-    public virtual async Task<TEntity> UpdateChanges(TKey id, TEntity entity, Expression<Func<TEntity, bool>>? scope,
-        CancellationToken cancellationToken)
-    {
-        if (scope == null)
-        {
-            return await UpdateChanges(id, entity, cancellationToken);
-        }
-
-        // save inside a transaction, ask the database whether the entity is still in scope (foreign keys and
-        // navigations count there), and roll everything back when it is not
-        var ownsTransaction = !_unitOfWork.HasActiveTransaction;
-        if (ownsTransaction)
-        {
-            await _unitOfWork.BeginTransactionAsync(cancellationToken: cancellationToken);
-        }
-
-        _scopeAfterSave = scope;
-        try
-        {
-            var updated = await UpdateChanges(id, entity, cancellationToken);
-            if (ownsTransaction)
-            {
-                await _unitOfWork.CommitAsync(cancellationToken);
-            }
-
-            return updated;
-        }
-        catch
-        {
-            if (ownsTransaction && _unitOfWork.HasActiveTransaction)
-            {
-                await _unitOfWork.RollbackAsync(cancellationToken);
-            }
-
-            throw;
-        }
-        finally
-        {
-            _scopeAfterSave = null;
-        }
     }
 
     private async Task<bool> StillInScopeAsync(TKey id, Expression<Func<TEntity, bool>> scope, CancellationToken cancellationToken) =>

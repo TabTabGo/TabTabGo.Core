@@ -171,6 +171,29 @@ public abstract class UnitOfWork : IUnitOfWork
     public virtual bool HasActiveTransaction => _context.Database.CurrentTransaction != null;
 
     /// <inheritdoc />
+    public virtual async Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        if (HasActiveTransaction)
+        {
+            // the owner of the open transaction also owns the retry and the commit
+            return await operation(cancellationToken).ConfigureAwait(false);
+        }
+
+        // a user-initiated transaction is only allowed inside the execution strategy, otherwise a retrying strategy throws
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async ct =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            var result = await operation(ct).ConfigureAwait(false);
+            await _context.SaveChangesAsync(ct).ConfigureAwait(false);
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
+            return result;
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public virtual int SaveChanges()
     {
         return _context.SaveChanges();

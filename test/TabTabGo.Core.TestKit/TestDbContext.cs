@@ -88,3 +88,13 @@ public class CommandCapture : Microsoft.EntityFrameworkCore.Diagnostics.DbComman
         return ValueTask.FromResult(result);
     }
 }
+
+/// <summary>The transient failure <see cref="RetryingStrategy"/> retries on.</summary>
+public sealed class TransientTestException() : Exception("transient");
+
+/// <summary>A retrying execution strategy for tests (retries <see cref="TransientTestException"/> immediately, up to 3 times).</summary>
+public sealed class RetryingStrategy(Microsoft.EntityFrameworkCore.Storage.ExecutionStrategyDependencies dependencies)
+    : Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy(dependencies, 3, TimeSpan.Zero)
+{
+    protected override bool ShouldRetryOn(Exception exception) => exception is TransientTestException;
+}

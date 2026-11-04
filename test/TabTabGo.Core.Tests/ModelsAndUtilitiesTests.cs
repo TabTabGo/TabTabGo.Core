@@ -428,6 +428,52 @@ public class ModelsAndUtilitiesTests
     }
 
     [Fact]
+    public async Task DefaultInterfaceMethods_ExecuteInTransaction_BeginsRunsAndCommits()
+    {
+        var uow = new MinimalUnitOfWork();
+        IUnitOfWork port = uow;
+
+        var result = await port.ExecuteInTransactionAsync(_ =>
+        {
+            uow.Calls.Add("Work");
+            return Task.FromResult(42);
+        });
+
+        Assert.Equal(42, result);
+        Assert.Equal(new[] { "Begin:ReadCommitted", "Work", "Commit" }, uow.Calls);
+    }
+
+    [Fact]
+    public async Task DefaultInterfaceMethods_ExecuteInTransaction_RollsBackAndRethrowsOnFailure()
+    {
+        var uow = new MinimalUnitOfWork();
+        IUnitOfWork port = uow;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            port.ExecuteInTransactionAsync<int>(_ => throw new InvalidOperationException("boom")));
+
+        Assert.Equal(new[] { "Begin:ReadCommitted", "Rollback" }, uow.Calls);
+        uow.HasActiveTransaction = true;
+        uow.Calls.Clear();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            port.ExecuteInTransactionAsync<int>(_ => throw new InvalidOperationException("boom")));
+        Assert.Empty(uow.Calls); // an outer transaction is the caller's to roll back
+    }
+
+    [Fact]
+    public async Task DefaultInterfaceMethods_ExecuteInTransaction_InsideAnOpenTransaction_JustRuns()
+    {
+        var uow = new MinimalUnitOfWork { HasActiveTransaction = true };
+        IUnitOfWork port = uow;
+
+        var result = await port.ExecuteInTransactionAsync(_ => Task.FromResult("done"));
+
+        Assert.Equal("done", result);
+        Assert.Empty(uow.Calls);
+        await Assert.ThrowsAsync<ArgumentNullException>(() => port.ExecuteInTransactionAsync<int>(null!));
+    }
+
+    [Fact]
     public void EntityChange_IsAValueRecord()
     {
         var a = new EntityChange("e", "Added", new Dictionary<string, object?>(), new Dictionary<string, object?>());
