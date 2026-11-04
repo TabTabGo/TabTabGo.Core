@@ -17,11 +17,39 @@
     <PackageDownload Include="Microsoft.AspNetCore.App.Ref" Version="[8.0.22]" />
   </ItemGroup>
 
+  <!--
+    The baseline (8.0.1-alpha-01) was built against these package versions. Their net8-era assemblies are the left-side
+    references, so a type that moved between a package and the shared framework resolves the way it did for the baseline.
+    Tfm is the lib folder that carries the assembly.
+  -->
+  <ItemGroup Condition="'$(_ApiCompatActive)' == 'true'">
+    <_BaselineDependency Include="microsoft.aspnetcore.jsonpatch" Version="8.0.1" Tfm="net8.0" />
+    <_BaselineDependency Include="microsoft.extensions.logging.abstractions" Version="8.0.0" Tfm="net8.0" />
+    <_BaselineDependency Include="microsoft.extensions.caching.abstractions" Version="8.0.0" Tfm="net8.0" />
+    <_BaselineDependency Include="microsoft.extensions.localization.abstractions" Version="8.0.1" Tfm="net8.0" />
+    <_BaselineDependency Include="microsoft.extensions.localization" Version="8.0.1" Tfm="net8.0" />
+    <_BaselineDependency Include="microsoft.entityframeworkcore" Version="8.0.1" Tfm="net8.0" />
+    <_BaselineDependency Include="microsoft.entityframeworkcore.relational" Version="8.0.1" Tfm="net8.0" />
+    <_BaselineDependency Include="microsoft.entityframeworkcore.abstractions" Version="8.0.1" Tfm="net8.0" />
+    <_BaselineDependency Include="microsoft.aspnetcore.odata" Version="8.2.4" Tfm="net6.0" />
+    <_BaselineDependency Include="linqkit.core" Version="1.2.5" Tfm="netstandard2.1" />
+    <_BaselineDependency Include="linqkit" Version="1.2.5" Tfm="netstandard2.1" />
+    <_BaselineDependency Include="newtonsoft.json" Version="13.0.3" Tfm="net6.0" />
+    <PackageDownload Include="@(_BaselineDependency)" Version="[%(Version)]" />
+  </ItemGroup>
+
   <Target Name="ApiCompatGate" AfterTargets="Build" Condition="'$(_ApiCompatActive)' == 'true'">
+    <ItemGroup>
+      <_RightRefDir Include="@(ReferencePathWithRefAssemblies->'%(RootDir)%(Directory)')" />
+    </ItemGroup>
+    <RemoveDuplicates Inputs="@(_RightRefDir)">
+      <Output TaskParameter="Filtered" ItemName="_RightRefDirUnique" />
+    </RemoveDuplicates>
     <PropertyGroup>
       <ApiCompatBaselineAssembly>$(NuGetPackageRoot)$([System.String]::Copy('$(PackageId)').ToLowerInvariant())/$(PackageValidationBaselineVersion)/lib/net8.0/$(AssemblyName).dll</ApiCompatBaselineAssembly>
-      <_LeftRefs>$(NuGetPackageRoot)microsoft.netcore.app.ref/8.0.22/ref/net8.0,$(NuGetPackageRoot)microsoft.aspnetcore.app.ref/8.0.22/ref/net8.0</_LeftRefs>
-      <_RightRefs>@(ReferencePathWithRefAssemblies->'%(RootDir)%(Directory)', ',')</_RightRefs>
+      <_BaselineDependencyDirs>@(_BaselineDependency->'$(NuGetPackageRoot)%(Identity)/%(Version)/lib/%(Tfm)', ',')</_BaselineDependencyDirs>
+      <_LeftRefs>$(NuGetPackageRoot)microsoft.netcore.app.ref/8.0.22/ref/net8.0,$(NuGetPackageRoot)microsoft.aspnetcore.app.ref/8.0.22/ref/net8.0,$(_BaselineDependencyDirs)</_LeftRefs>
+      <_RightRefs>@(_RightRefDirUnique, ',')</_RightRefs>
       <_ApiCompatCommand>dotnet tool run apicompat -- -l "$(ApiCompatBaselineAssembly)" -r "$(TargetPath)" --lref "$(_LeftRefs)" --rref "$(_RightRefs)" --suppression-file "$(ApiCompatSuppressionFile)" --permit-unnecessary-suppressions</_ApiCompatCommand>
     </PropertyGroup>
     <Error Condition="!Exists('$(ApiCompatBaselineAssembly)')" Text="ApiCompat baseline $(ApiCompatBaselineAssembly) is missing; restore the project first." />
