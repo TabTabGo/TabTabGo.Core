@@ -1,6 +1,6 @@
 using System.Data;
 using System.Linq.Expressions;
-using LinqKit.Core;
+using LinqKit;
 using Microsoft.EntityFrameworkCore;
 using TabTabGo.Core.Data;
 using TabTabGo.Core.Entities;
