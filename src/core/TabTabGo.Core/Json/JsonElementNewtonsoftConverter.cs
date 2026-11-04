@@ -9,8 +9,11 @@ namespace TabTabGo.Core.Json;
 public sealed class JsonElementNewtonsoftConverter : Nj.JsonConverter
 {
     /// <inheritdoc />
-    public override bool CanConvert(Type objectType) =>
-        objectType == typeof(JsonElement) || objectType == typeof(JsonDocument);
+    public override bool CanConvert(Type objectType)
+    {
+        var type = Nullable.GetUnderlyingType(objectType) ?? objectType;
+        return type == typeof(JsonElement) || type == typeof(JsonDocument);
+    }
 
     /// <inheritdoc />
     public override void WriteJson(Nj.JsonWriter writer, object? value, Nj.JsonSerializer serializer)

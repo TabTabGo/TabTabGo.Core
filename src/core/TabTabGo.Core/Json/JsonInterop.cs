@@ -218,7 +218,7 @@ public static class JsonInterop
                         BigInteger big when big >= long.MinValue && big <= long.MaxValue => (long)big,
                         BigInteger big => (object)(decimal.TryParse(big.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var dec)
                             ? dec
-                            : (double)big),
+                            : double.Parse(big.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture)),
                         ulong ul when ul <= long.MaxValue => (long)ul,
                         ulong ul => (decimal)ul,
                         var other => Convert.ToInt64(other, CultureInfo.InvariantCulture),
@@ -331,20 +331,58 @@ public static class JsonInterop
     public static bool JsonEquals(this NjLinq.JToken left, JsonElement right)
     {
         ArgumentNullException.ThrowIfNull(left);
-        return DeepEqualsTokens(Normalize(left), right.ToJToken(DecimalOptions));
+        return DeepEqualsTokens(Normalize(left), CanonicalNumbers(right.ToJToken(DecimalOptions)));
     }
 
     /// <summary>Compares a Newtonsoft token with a <see cref="JsonNode"/>: property order is ignored, numbers compare by value.</summary>
     public static bool JsonEquals(this NjLinq.JToken left, JsonNode? right)
     {
         ArgumentNullException.ThrowIfNull(left);
-        return DeepEqualsTokens(Normalize(left), right.ToJToken(DecimalOptions));
+        return DeepEqualsTokens(Normalize(left), CanonicalNumbers(right.ToJToken(DecimalOptions)));
     }
 
     private static readonly JsonInteropOptions DecimalOptions = new() { FloatParseHandling = Nj.FloatParseHandling.Decimal };
 
     private static NjLinq.JToken Normalize(NjLinq.JToken token) =>
-        JTokenWriter.Read(JTokenWriter.ToJsonString(token, false), DecimalOptions);
+        CanonicalNumbers(JTokenWriter.Read(JTokenWriter.ToJsonString(token, false), DecimalOptions));
+
+    private static IEnumerable<NjLinq.JValue> ValuesOf(NjLinq.JToken token)
+    {
+        if (token is NjLinq.JValue value)
+        {
+            yield return value;
+            yield break;
+        }
+
+        foreach (var child in token.Children())
+        {
+            foreach (var inner in ValuesOf(child))
+            {
+                yield return inner;
+            }
+        }
+    }
+
+    /// <summary>Newtonsoft treats 1 (integer) and 1.0 (float) as different values; turn every number into a decimal so they compare by value.</summary>
+    private static NjLinq.JToken CanonicalNumbers(NjLinq.JToken token)
+    {
+        foreach (var value in ValuesOf(token).ToList())
+        {
+            if (value.Type is NjLinq.JTokenType.Integer or NjLinq.JTokenType.Float && value.Value is not null)
+            {
+                try
+                {
+                    value.Value = Convert.ToDecimal(value.Value is BigInteger big ? (object)(decimal)big : value.Value, CultureInfo.InvariantCulture);
+                }
+                catch (Exception ex) when (ex is OverflowException or InvalidCastException)
+                {
+                    // too large for a decimal: keep the original value
+                }
+            }
+        }
+
+        return token;
+    }
 
     private static bool DeepEqualsTokens(NjLinq.JToken left, NjLinq.JToken right) => NjLinq.JToken.DeepEquals(left, right);
 
