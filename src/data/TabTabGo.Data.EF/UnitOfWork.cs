@@ -228,9 +228,7 @@ public abstract class UnitOfWork : IUnitOfWork
         var mba = PropertyAccessorCache<T>.Get(propertyName);
         if (mba == null)
         {
-            var ex = new InvalidOperationException($"Property '{propertyName}' does not exist on {typeof(T).Name}.");
-            _logger.LogError(ex, "Error when trying to get the property, it doesn't exist");
-            throw ex;
+            throw new InvalidOperationException($"Property '{propertyName}' does not exist on {typeof(T).Name}.");
         }
 
         // 2. Try converting value to correct type
@@ -245,7 +243,7 @@ public abstract class UnitOfWork : IUnitOfWork
             ex is OverflowException ||
             ex is ArgumentNullException)
         {
-            _logger.LogError(ex, "Error when trying to convert type of property value with type of property");
+            // logged once, by the caller
             throw;
         }
 
