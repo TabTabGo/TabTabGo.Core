@@ -214,7 +214,9 @@ public static class SerializerEngine
     /// <summary>Serialize a dynamic value to json text.</summary>
     public static string DynamicToJson(dynamic? dObject)
     {
-        return JsonSerializer.Serialize(dObject, JsonSerializationSettings);
+        // a dynamic argument would be bound at run time to the wrong Serialize overload
+        object? value = dObject;
+        return value is null ? "null" : JsonSerializer.Serialize(value, value.GetType(), JsonSerializationSettings);
     }
 
     /// <summary>Serialize a dynamic value to xml.</summary>
@@ -381,9 +383,15 @@ public static class SerializerEngine
         return DynamicToJson(EnumToDynamic(enumeration));
     }
 
+    private static JsonNode EnumId(object enumeration)
+    {
+        var id = Convert.ToInt64(enumeration, CultureInfo.InvariantCulture);
+        return id is >= int.MinValue and <= int.MaxValue ? JsonValue.Create((int)id) : JsonValue.Create(id);
+    }
+
     private static JsonObject EnumToJsonObject(object enumeration) => new()
     {
-        ["id"] = Convert.ToInt64(enumeration, CultureInfo.InvariantCulture),
+        ["id"] = EnumId(enumeration),
         ["name"] = enumeration.ToString() ?? string.Empty,
     };
 
