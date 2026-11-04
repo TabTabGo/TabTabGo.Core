@@ -413,7 +413,7 @@ public class ScopeAndBoundsTests : ServiceTestBase
         try
         {
             var localizer = new JsonStringLocalizer(new JsonStringLocalizerOptions { ResourcesPath = root, ResourceAssemblyName = string.Empty });
-            Assert.Equal("Hello", localizer.GetString("Hello", "zz")); // lists the folder once
+            Assert.Equal("Hello", localizer.GetString("Hello", "en")); // lists the folder once
 
             File.WriteAllText(Path.Combine(root, "zz.json"), "{\"Hello\":\"late\"}"); // well-shaped, exists, but was not in the list
             var before = JsonStringLocalizer.CacheCount;
