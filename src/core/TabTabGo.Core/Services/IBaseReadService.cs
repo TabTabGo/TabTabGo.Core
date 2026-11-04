@@ -24,7 +24,7 @@ public interface IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
     /// <param name="flags">query flags</param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query, string[]? includeProperties = null, 
+    Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity, bool>> query, string[]? includeProperties = null, 
         QueryFlags? flags = null,
         CancellationToken cancellationToken = default);
 
@@ -39,7 +39,7 @@ public interface IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
     /// <param name="flags"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<PageList<TEntity>> GetPageList(Expression<Func<TEntity?, bool>> query,
+    Task<PageList<TEntity>> GetPageList(Expression<Func<TEntity, bool>> query,
         Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
         int page = 0, int pageSize = 25,
         string[]? includeProperties = null,

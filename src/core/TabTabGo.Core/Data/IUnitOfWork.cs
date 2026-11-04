@@ -1,8 +1,11 @@
-﻿using System.Data;
+using System.Data;
 using System.Linq.Expressions;
 
 namespace TabTabGo.Core.Data;
 
+/// <summary>
+/// Unit of work: one transaction and one commit over the repositories it hands out.
+/// </summary>
 public interface IUnitOfWork : IDisposable
 {
     /// <summary>
@@ -80,5 +83,41 @@ public interface IUnitOfWork : IDisposable
     /// Get entity changes from db context
     /// </summary>
     /// <returns>list of changes</returns>
-    dynamic? GetChanges();
+    IReadOnlyList<EntityChange> GetChanges();
+
+    /// <summary>
+    /// Begin transaction asynchronously. The default implementation calls <see cref="BeginTransaction"/>.
+    /// </summary>
+    /// <param name="isolationLevel">Isolation level</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task BeginTransactionAsync(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted, CancellationToken cancellationToken = default)
+    {
+        BeginTransaction(isolationLevel);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Commit transaction asynchronously. The default implementation calls <see cref="Commit"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task CommitAsync(CancellationToken cancellationToken = default)
+    {
+        Commit();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Roll back transaction asynchronously. The default implementation calls <see cref="Rollback"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task RollbackAsync(CancellationToken cancellationToken = default)
+    {
+        Rollback();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// True while a transaction is open. The default implementation returns false.
+    /// </summary>
+    bool HasActiveTransaction => false;
 }

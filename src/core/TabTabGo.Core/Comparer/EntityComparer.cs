@@ -1,82 +1,79 @@
-﻿
+namespace TabTabGo.Core.Comparer;
 
-namespace TabTabGo.Core.Comparer
+/// <summary>
+/// Compares two entities property by property (audit fields and collections are ignored) and records
+/// the properties that differ.
+/// </summary>
+public class EntityComparer : IEqualityComparer<IEntity>, IDisposable
 {
-    public class EntityComparer : IEqualityComparer<IEntity>, IDisposable
+    private static readonly HashSet<string> AuditProperties = new()
     {
-        public List<PropertyInfo> DifferentProperties { get; set; } = new List<PropertyInfo>();
+        nameof(IEntity.CreatedBy), nameof(IEntity.CreatedDate), nameof(IEntity.UpdatedBy), nameof(IEntity.UpdatedDate)
+    };
 
-        public IEnumerable<string> GetDifferentProeprties()
-        {
-            return DifferentProperties?.Select(prop => prop.Name).ToArray();
-        }
-        public void Dispose()
-        {
-            DifferentProperties?.Clear();
-            DifferentProperties = null;
-        }
+    /// <summary>Properties that differed in the last comparison.</summary>
+    public List<PropertyInfo> DifferentProperties { get; set; } = new();
 
-        public bool Equals(IEntity x, IEntity y)
+    /// <summary>Names of the properties that differed in the last comparison.</summary>
+    public IEnumerable<string> GetDifferentProeprties()
+    {
+        return DifferentProperties.Select(prop => prop.Name).ToArray();
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        DifferentProperties.Clear();
+        GC.SuppressFinalize(this);
+    }
+
+    /// <inheritdoc />
+    public bool Equals(IEntity? x, IEntity? y)
+    {
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        var isEqual = true;
+        var properties = x.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        foreach (var prop in properties)
         {
-            if (x == null && y == null) return true;
-            if (x == null && y != null) return false;
-            if (x != null && y == null) return false;
-            var isEqual = true;
-            var properties = x.GetType().GetProperties(System.Reflection.BindingFlags.Public);
-            foreach (var prop in properties)
+            if (AuditProperties.Contains(prop.Name) || prop.GetIndexParameters().Length > 0 || !prop.CanRead) continue;
+
+            var xValue = prop.GetValue(x);
+            var yValue = prop.GetValue(y);
+            if (xValue == null && yValue == null) continue;
+            if (xValue == null || yValue == null)
             {
-                if (prop.Name == "CreatedBy" || prop.Name == "CreatedDate" || prop.Name == "UpdatedBy" || prop.Name == "UpdatedDate") continue;
-
-                var xValue = prop.GetValue(x);
-                var yValue = prop.GetValue(y);
-                if (xValue == null && yValue == null) continue;
-                if (xValue != null && yValue == null)
-                {
-                    DifferentProperties.Add(prop);
-                    isEqual = false;
-                    continue;
-                }
-                if (xValue == null && yValue != null)
-                {
-                    DifferentProperties.Add(prop);
-                    isEqual = false;
-                    continue;
-                }
-                if (prop.PropertyType.IsSubclassOf(typeof(Entity)))
-                {
-                    using (var entityComparer = new EntityComparer())
-                    {
-                        if (!entityComparer.Equals(xValue as Entity, yValue as Entity))
-                        {
-                            DifferentProperties.Add(prop);
-                            isEqual = false;
-                        }
-                    }
-
-                }
-                else if (prop.PropertyType.IsArray || typeof(IEnumerable).IsAssignableFrom(prop.PropertyType) || typeof(ICollection).IsAssignableFrom(prop.PropertyType))
-                {
-                    //TODO compare Collections;
-
-                }
-                else if (!xValue.Equals(yValue))
-                {
-                    DifferentProperties.Add(prop);
-                    isEqual = false;
-                    continue;
-                }
-
+                DifferentProperties.Add(prop);
+                isEqual = false;
+                continue;
             }
 
-            return isEqual;
-
+            if (xValue is IEntity xEntity && yValue is IEntity yEntity)
+            {
+                using var entityComparer = new EntityComparer();
+                if (!entityComparer.Equals(xEntity, yEntity))
+                {
+                    DifferentProperties.Add(prop);
+                    isEqual = false;
+                }
+            }
+            else if (xValue is string || !typeof(IEnumerable).IsAssignableFrom(prop.PropertyType))
+            {
+                // collections (including ExtraProperties) are not compared
+                if (!xValue.Equals(yValue))
+                {
+                    DifferentProperties.Add(prop);
+                    isEqual = false;
+                }
+            }
         }
 
-        public int GetHashCode(IEntity obj)
-        {
-            return obj.GetHashCode();
-        }
+        return isEqual;
+    }
 
-
+    /// <inheritdoc />
+    public int GetHashCode(IEntity obj)
+    {
+        return obj.GetHashCode();
     }
 }

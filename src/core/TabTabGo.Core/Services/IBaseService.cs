@@ -1,25 +1,70 @@
-﻿using Microsoft.AspNetCore.JsonPatch;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.JsonPatch.Operations;
 
 namespace TabTabGo.Core.Services;
 
-public interface IBaseService<TEntity, TKey> :IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
+/// <summary>
+/// Read and write service for an entity.
+/// </summary>
+/// <typeparam name="TEntity">Entity type</typeparam>
+/// <typeparam name="TKey">Entity key type</typeparam>
+public interface IBaseService<TEntity, TKey> : IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
 {
-  
     #region Update Functions
+
+    /// <summary>Replaces the stored entity with the given one.</summary>
+    /// <param name="id">Entity key</param>
+    /// <param name="entity">New values</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     Task<TEntity> Update(TKey id, TEntity entity, CancellationToken cancellationToken = default);
+
+    /// <summary>Copies the changed values of the given entity onto the stored one.</summary>
+    /// <param name="id">Entity key</param>
+    /// <param name="entity">Entity with the changes</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     Task<TEntity> UpdateChanges(TKey id, TEntity entity, CancellationToken cancellationToken);
+
+    /// <summary>Applies a JSON patch document to the stored entity.</summary>
+    /// <param name="id">Entity key</param>
+    /// <param name="entity">The patch document</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     Task<TEntity> Update(TKey id, JsonPatchDocument<TEntity> entity, CancellationToken cancellationToken = default);
+
+    /// <summary>Merges the properties present in a JSON object onto the stored entity.</summary>
+    /// <param name="id">Entity key</param>
+    /// <param name="entity">Partial entity as JSON</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     Task<TEntity> Update(TKey id, JsonObject entity, CancellationToken cancellationToken = default);
+
+    /// <summary>Applies one JSON patch operation to an object.</summary>
+    /// <param name="operation">The operation</param>
+    /// <param name="affectedObject">The object to change</param>
     void HandleJsonOperator(Operation operation, object affectedObject);
+
     #endregion
 
+    /// <summary>Creates an entity.</summary>
+    /// <param name="entity">The entity</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     Task<TEntity> Create(TEntity? entity, CancellationToken cancellationToken = default);
+
+    /// <summary>Deletes an entity.</summary>
+    /// <param name="id">Entity key</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     Task<TEntity> Delete(TKey id, CancellationToken cancellationToken = default);
+
+    /// <summary>Whether the entity can be deleted.</summary>
+    /// <param name="id">Entity key</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     Task<bool> CanDelete(TKey id, CancellationToken cancellationToken = default);
-    
-   
+
+    /// <summary>Whether all the entities can be deleted.</summary>
+    /// <param name="ids">Entity keys</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     Task<bool> CanDelete(IEnumerable<TKey> ids, CancellationToken cancellationToken);
+
+    /// <summary>Deletes several entities.</summary>
+    /// <param name="ids">Entity keys</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     Task<IEnumerable<TEntity>> Delete(IEnumerable<TKey> ids, CancellationToken cancellationToken);
 }
-
