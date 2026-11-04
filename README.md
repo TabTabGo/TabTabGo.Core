@@ -113,6 +113,9 @@ the type does not declare. Both JSON engines flatten the bag into the entity's J
 * `GetChanges()` returns `IReadOnlyList<EntityChange>` with **snapshot** values (`State`, `OriginalValues`, `CurrentValues`).
 * New port members are default interface methods, so your own implementations of the 8.x interfaces still compile.
 
+**Tracking.** Paged reads (`GetPageListAsync`, `GetProjectedPageListAsync`) and OData reads are **untracked** by default.
+Pass `QueryFlags.EnableTracking` when you want tracked entities.
+
 **Paging contract.** `pageNumber` going **in** is a **0-based page index**; `PageList<T>.PageNumber` coming **out** is
 **1-based**. Without an `orderBy` the primary key is used so pages are stable. A negative index throws.
 
@@ -126,7 +129,7 @@ from the route key (400, 4003).
 
 ### 4.4 OData
 OData options are applied with case-insensitive property names; `$select` is translated to SQL. The service understands the
-custom function `xmlExist(path, 'value')` **only under `and`**: below an `or` or a `not` it answers **400**. The path must
+custom function `xmlExist(path, 'value')` **only under `and`** (several calls are ANDed, never ORed): below an `or` or a `not` it answers **400**. The path must
 be a mapped property path, the value is one quoted literal that travels as the SQL parameter `@pN` and the generated SQL
 compares the text of the elements: `column.exist('//*[text() = sql:variable("@p0")]') = 1`.
 
@@ -141,6 +144,16 @@ compares the text of the elements: `column.exist('//*[text() = sql:variable("@p0
 | PATCH | `{prefix}{name}/{id}` | JSON Patch document (`application/json-patch+json` or `application/json`) |
 | DELETE | `{prefix}{name}/{id}` | `{ message, code }`; **412** when `CanDelete` is false |
 
+* **DELETE is a soft delete**: it sets `IsEnabled = false`. The row stays, and GET by id and search still return it unless
+  your scope criteria or a query filter exclude disabled entities.
+* **PATCH guards.** A patch cannot touch the key, the audit fields, `IsEnabled` or related entities (400
+  `PROTECTED_PROPERTY`; names are resolved to the CLR property first, so `tenant_id`, `TENANTID` and `tenantid` are the same
+  property). Override `IsProtectedProperty` in your service to protect more, for example a tenant column. Adding extra
+  properties is bounded (100 keys, 100-character names, 16 384-character values). After the patch the entity must still
+  be inside `GetFixCriteria`: the service saves inside a transaction, asks the database (so foreign keys count) and rolls back
+  with a 404 when the entity left the scope.
+* **Bulk delete** (`EntityControllerBase.DeleteEntities`) accepts at most 500 ids (400 `TOO_MANY_IDS`), looks them up with one
+  `IN` list, and checks the scope with one count query.
 * Every route requires authorization (`RequireAuthorization()` on the group); there is no PUT.
 * Services are resolved **per request**, so scoped services and their `DbContext` are never shared between requests.
 * **Scope criteria.** `SearchFixCriteria`, `GetFixCriteria` and `ExportFixCriteria` are always applied. `GetFixCriteria`
@@ -152,6 +165,15 @@ compares the text of the elements: `column.exist('//*[text() = sql:variable("@p0
 **`EntityControllerBase<…>`** is the legacy MVC base class. It stays for existing controllers; new code uses
 `MapEntityRoutes`. Override `SearchFixCriteria`, `GetFixCriteria` and `ExportFixCriteria` to scope it the same way. The host
 must be able to bind `JsonPatchDocument<T>` (for example `AddNewtonsoftJson`).
+
+### 4.5.1 Contracts you implement
+* `ISecurityService<TUserKey, TTenantKey>`: who the caller is (user, tenant, roles, permissions). Core only declares it;
+  you implement it over your identity system. `GetClientId()` no longer exists.
+* `IMapper<TEntity, TViewModel>`: maps entity to view model, request to entity, and pages. Register it to return view models;
+  without one the entity is the view model and, for `EntityControllerBase`, `CreateEntity` answers 500 `MAPPER_REQUIRED`
+  unless the create request is the entity (`MapEntityRoutes` fails at startup instead).
+* `IValidationService<TEntity, TRequest>`: validates create requests and patched entities; a result with `IsValid == false`
+  answers 400 with the errors. Register none to skip validation.
 
 ### 4.6 Middlewares
 * `app.UseTabTabGoErrorHandling()` turns exceptions into `{ number, code, message, traceId }`. `ApiException` keeps its
@@ -283,13 +305,18 @@ Binary and behaviour changes (additive changes are not listed):
 | B36 | `EntityControllerBase.CreateEntity` `Location` is the resource URL |
 | B37 | `ISecurityService.GetClientId()` and `ITenant<TKey>.Settings` are removed |
 
+Additional 10.0.0 changes: paged and OData reads are untracked by default, and `QueryFlags.EnableTracking` asks for tracking
+(B38); `xmlExist` compares element text with the value instead of running a caller-supplied XPath (B39); `ControllerPrefix` and
+`Version` now apply to the generated routes, so consumers that set them get new URLs (B26); `EntityControllerBase` has new
+virtual `SearchFixCriteria`, `GetFixCriteria` and `ExportFixCriteria`.
+
 Found while writing the tests (also fixed): scope criteria were missing on search, patch and delete (D-34); the `xmlExist`
 function pasted user input into SQL (D-35); the localizer built paths from the caller's culture (D-36); `GetViewModelsDataTable`
 could never add a row (D-37); `DynamicToJson` failed to bind at run time (D-38); the minimal-API PATCH could not bind a JSON
 Patch body (D-39); `Update(id, entity)` with a different body key failed inside EF (now 400, D-40).
 
-Not changed on purpose: `BaseReadService.GetByKey(lastUpdatedDate)` returns the entity only when
-`lastUpdatedDate > entity.UpdatedDate` (the documented intent reads the other way round; confirm before changing);
+Not changed on purpose: `BaseReadService.GetByKey(lastUpdatedDate)` returns the entity only when it has **not** been updated
+since that date (`lastUpdatedDate > entity.UpdatedDate`); this is the behaviour of 8.x and is now documented as such;
 `GetIncludedProperties` only detects `ICollection<T>` / `IEnumerable<T>` / array typed navigation properties.
 
 ### From 6.x
