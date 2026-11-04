@@ -351,8 +351,11 @@ public class BaseReadServiceTests : ServiceTestBase
         var service = new ExposedService(UnitOfWork);
         var options = ODataTestHelper.Create("$filter=" + filter);
 
+        var before = TabTabGo.Core.Services.OData.ODataFilterTokenizer.Calls;
+
         var (populated, custom) = service.Populate(options);
 
+        Assert.Equal(before, TabTabGo.Core.Services.OData.ODataFilterTokenizer.Calls); // the tokenizer never saw it
         Assert.Same(options.Filter, populated);
         Assert.Null(custom);
     }

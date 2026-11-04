@@ -131,6 +131,28 @@ public static class EntityPropertyGuard
         }
     }
 
+    /// <summary>
+    /// Checks the whole bag of an entity: at most <see cref="MaxExtraProperties"/> keys, every key and value within its limit.
+    /// Run it after a client change has been applied and before the entity is saved; per-operation checks cannot see the
+    /// bag the operations add up to.
+    /// </summary>
+    /// <param name="bag">The extra properties of the entity</param>
+    /// <exception cref="ApiException">A limit is exceeded (400)</exception>
+    public static void EnsureWithinLimits(IDictionary<string, object?> bag)
+    {
+        ArgumentNullException.ThrowIfNull(bag);
+        if (bag.Count > MaxExtraProperties)
+        {
+            throw Limit($"An entity can hold at most {MaxExtraProperties} extra properties.");
+        }
+
+        foreach (var (key, value) in bag)
+        {
+            // an empty dictionary: the count was checked above, here only the key and the value are looked at
+            EnsureExtraPropertyAllowed(new Dictionary<string, object?>(), key, value);
+        }
+    }
+
     private static ApiException Limit(string message) =>
         new(message, statusCode: HttpStatusCode.BadRequest, code: "EXTRA_PROPERTIES_LIMIT", errorNumber: 5001);
 }

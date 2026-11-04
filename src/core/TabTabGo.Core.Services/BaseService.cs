@@ -397,6 +397,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
                 HandleJsonOperator(error.Operation, error.AffectedObject);
             }
         });
+        EnsureExtraPropertiesWithinLimits(current);
         var updatedEntity = await CurrentRepository.UpdateAsync(current, cancellationToken) ?? current;
         await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
         await PostUpdate(updatedEntity, cancellationToken);
@@ -506,6 +507,13 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         {
             EnsureNamePatchable(name);
         }
+    }
+
+    /// <inheritdoc />
+    public virtual void EnsureExtraPropertiesWithinLimits(TEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        EntityPropertyGuard.EnsureWithinLimits(entity.ExtraProperties);
     }
 
     /// <inheritdoc />

@@ -12,6 +12,11 @@ namespace TabTabGo.Core.Services.OData;
 /// </summary>
 internal static class ODataFilterTokenizer
 {
+    private static int _calls;
+
+    /// <summary>How many times <see cref="Split"/> ran in this process (lets tests prove that standard filters bypass it).</summary>
+    internal static int Calls => Volatile.Read(ref _calls);
+
     /// <summary>Result of <see cref="Split"/>.</summary>
     /// <param name="Filter">The filter without the custom functions; empty when nothing is left</param>
     /// <param name="CustomFilters">The custom function calls that were removed</param>
@@ -25,6 +30,7 @@ internal static class ODataFilterTokenizer
     /// <exception cref="ApiException">A custom function is used under <c>or</c> or <c>not</c> (400)</exception>
     internal static Result Split(string filter, IReadOnlyCollection<string> customFunctions)
     {
+        Interlocked.Increment(ref _calls);
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(customFunctions);
         var parser = new Parser(filter, customFunctions);

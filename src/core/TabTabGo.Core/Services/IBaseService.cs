@@ -73,6 +73,16 @@ public interface IBaseService<TEntity, TKey> : IBaseReadService<TEntity, TKey> w
     }
 
     /// <summary>
+    /// Checks the <see cref="IEntity.ExtraProperties"/> of an entity after a client patch was applied to it: key count, key
+    /// length and value size. Call it before saving. The default implementation accepts everything.
+    /// </summary>
+    /// <param name="entity">The patched entity</param>
+    /// <exception cref="Exceptions.ApiException">A limit is exceeded (400)</exception>
+    void EnsureExtraPropertiesWithinLimits(TEntity entity)
+    {
+    }
+
+    /// <summary>
     /// Rejects a partial JSON object that names a protected property. The default implementation accepts everything.
     /// </summary>
     /// <param name="changes">The partial entity</param>

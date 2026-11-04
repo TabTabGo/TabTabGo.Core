@@ -699,9 +699,8 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
 
         //Get the expanded properties
         var extendProperties = GetOdataPropertiesExpandProperties(query, includeProperties);
-        // OData reads are untracked unless the caller asks for tracking
-        var requested = flags ?? 0;
-        var queryFlags = requested.HasFlag(QueryFlags.EnableTracking) ? requested : requested | QueryFlags.DisableTracking;
+        // OData reads are untracked; the repository lets QueryFlags.EnableTracking win
+        var queryFlags = (flags ?? 0) | QueryFlags.DisableTracking;
         var queryableEntity = CurrentRepository.GetQueryable(extendProperties, queryFlags);
         var populatedQuery = PopulateFilter(query);
         if (populatedQuery.CustomFilter != null)

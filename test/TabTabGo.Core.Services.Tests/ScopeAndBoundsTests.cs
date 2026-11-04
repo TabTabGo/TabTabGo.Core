@@ -547,4 +547,44 @@ public class ScopeAndBoundsTests : ServiceTestBase
 
         public int GetKey(Product entity) => entity.Id;
     }
+
+    [Fact]
+    public void EnsureExtraPropertiesWithinLimits_ChecksTheWholeBag()
+    {
+        var fine = new Product();
+        fine.ExtraProperties["a"] = 1;
+        var tooMany = new Product();
+        for (var i = 0; i < 101; i++)
+        {
+            tooMany.ExtraProperties["k" + i] = i;
+        }
+
+        var bigValue = new Product();
+        bigValue.ExtraProperties["big"] = new string('x', 20_000);
+        var longKey = new Product();
+        longKey.ExtraProperties[new string('k', 101)] = 1;
+
+        Service.EnsureExtraPropertiesWithinLimits(fine);
+        Assert.Throws<ApiException>(() => Service.EnsureExtraPropertiesWithinLimits(tooMany));
+        Assert.Throws<ApiException>(() => Service.EnsureExtraPropertiesWithinLimits(bigValue));
+        Assert.Throws<ApiException>(() => Service.EnsureExtraPropertiesWithinLimits(longKey));
+        Assert.Throws<ArgumentNullException>(() => Service.EnsureExtraPropertiesWithinLimits(null!));
+        ((IBaseService<Product, int>)new OnlyGetByKeyService()).EnsureExtraPropertiesWithinLimits(tooMany); // the default interface method accepts
+    }
+
+    [Fact]
+    public async Task Update_JsonPatch_ManyExtraPropertyOperations_AreRejectedBeforeTheSave()
+    {
+        var patch = new JsonPatchDocument<Product>();
+        for (var i = 0; i < 300; i++)
+        {
+            patch.Operations.Add(new Operation<Product>("add", "/extraProperties/k" + i, null, 1));
+        }
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => Service.Update(6, patch, Ct));
+
+        Assert.Equal("EXTRA_PROPERTIES_LIMIT", ex.ErrorCode);
+        await using var fresh = Db.CreateContext();
+        Assert.Empty(fresh.Products.Find(6)!.ExtraProperties);
+    }
 }

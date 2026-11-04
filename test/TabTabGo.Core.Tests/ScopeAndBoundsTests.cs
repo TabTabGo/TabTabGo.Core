@@ -223,4 +223,17 @@ public class ScopeAndBoundsTests
         Assert.Equal("c", watch.Format);
     }
 #pragma warning restore CS0618
+
+    [Fact]
+    public void EnsureWithinLimits_CountKeysAndValues()
+    {
+        var ok = new Dictionary<string, object?> { ["a"] = 1, ["b"] = "x" };
+        var many = Enumerable.Range(0, 101).ToDictionary(i => "k" + i, i => (object?)i);
+
+        EntityPropertyGuard.EnsureWithinLimits(ok);
+        EntityPropertyGuard.EnsureWithinLimits(Enumerable.Range(0, 100).ToDictionary(i => "k" + i, i => (object?)i));
+        Assert.Throws<ApiException>(() => EntityPropertyGuard.EnsureWithinLimits(many));
+        Assert.Throws<ApiException>(() => EntityPropertyGuard.EnsureWithinLimits(new Dictionary<string, object?> { ["big"] = new string('x', 20_000) }));
+        Assert.Throws<ArgumentNullException>(() => EntityPropertyGuard.EnsureWithinLimits(null!));
+    }
 }

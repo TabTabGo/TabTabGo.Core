@@ -90,9 +90,8 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(pageNumber);
-        // paged reads are untracked unless the caller asks for tracking
-        var effective = flags ?? 0;
-        var query = GetQueryable(includeProperties, effective.HasFlag(QueryFlags.EnableTracking) ? effective : effective | QueryFlags.DisableTracking);
+        // paged reads are untracked; SetFlags lets QueryFlags.EnableTracking win
+        var query = GetQueryable(includeProperties, (flags ?? 0) | QueryFlags.DisableTracking);
 
         if (filter != null)
         {

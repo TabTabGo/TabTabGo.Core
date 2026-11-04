@@ -285,6 +285,9 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
                 }
             });
 
+            // the operations add up in the entity's own bag: check the result, not each operation
+            _currentService.EnsureExtraPropertiesWithinLimits(entity);
+
             // the patch must not move the entity out of the scope it was found in; nothing is saved
             if (OutOfScope(entity))
             {
@@ -372,6 +375,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
             }
 
             _currentService.ApplyJson(changes, entity);
+            _currentService.EnsureExtraPropertiesWithinLimits(entity);
 
             // the patch must not move the entity out of the scope it was found in; nothing is saved
             if (OutOfScope(entity))

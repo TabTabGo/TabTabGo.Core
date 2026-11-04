@@ -318,6 +318,9 @@ public static class SetupEntityRouters
                     }
                 });
 
+                // the operations add up in the entity's own bag: check the result, not each operation
+                service.EnsureExtraPropertiesWithinLimits(entity);
+
                 // the patch must not move the entity out of the scope it was found in; nothing is saved
                 if (getScope != null && !getScope(entity))
                 {

@@ -690,4 +690,70 @@ public class MapEntityRoutesTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("EXTRA_PROPERTIES_LIMIT", (await Body(response)).GetProperty("code").GetString());
     }
+
+    [Fact]
+    public async Task Patch_ManyExtraPropertyOperations_AreCappedAsAWhole_AndNothingIsPersisted()
+    {
+        // each operation was checked against an empty dictionary, so a thousand small ones all passed
+        await using var app = await TestApp.StartAsync();
+        var operations = string.Join(",", Enumerable.Range(0, 1000).Select(i => "{\"op\":\"add\",\"path\":\"/extraProperties/k" + i + "\",\"value\":1}"));
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2", Patch("[" + operations + "]")), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("EXTRA_PROPERTIES_LIMIT", (await Body(response)).GetProperty("code").GetString());
+        await using var fresh = app.Db.CreateContext();
+        Assert.Empty(fresh.Products.Find(2)!.ExtraProperties);
+    }
+
+    [Fact]
+    public async Task Patch_NewKeysOnTopOfAnExistingBag_AreCappedAgainstTheEntitiesRealBag()
+    {
+        await using var app = await TestApp.StartAsync();
+        await using (var context = app.Db.CreateContext())
+        {
+            var product = context.Products.Find(2)!;
+            for (var i = 0; i < 95; i++)
+            {
+                product.ExtraProperties["old" + i] = i;
+            }
+
+            await context.SaveChangesAsync(Ct);
+        }
+
+        var operations = string.Join(",", Enumerable.Range(0, 10).Select(i => "{\"op\":\"add\",\"path\":\"/extraProperties/new" + i + "\",\"value\":1}"));
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2", Patch("[" + operations + "]")), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        Assert.Equal(95, fresh.Products.Find(2)!.ExtraProperties.Count);
+    }
+
+    [Theory]
+    [InlineData("copy")]
+    [InlineData("move")]
+    public async Task Patch_CopyOrMoveIntoExtraProperties_IsSizeCheckedOrRejected(string op)
+    {
+        await using var app = await TestApp.StartAsync();
+        await using (var context = app.Db.CreateContext())
+        {
+            context.Products.Find(2)!.Description = new string('x', 20_000);
+            await context.SaveChangesAsync(Ct);
+        }
+
+        var big = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2",
+            Patch("[{\"op\":\"" + op + "\",\"from\":\"/description\",\"path\":\"/extraProperties/big\"}]")), Ct);
+        var whole = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2",
+            Patch("[{\"op\":\"" + op + "\",\"from\":\"/name\",\"path\":\"/extraProperties\"}]")), Ct);
+        var wholeObject = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2",
+            Patch("[{\"op\":\"add\",\"path\":\"/extraProperties\",\"value\":{\"a\":1}}]")), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, big.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, whole.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, wholeObject.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        var stored = fresh.Products.Find(2)!;
+        Assert.Empty(stored.ExtraProperties);
+        Assert.Equal(20_000, stored.Description!.Length);
+    }
 }
