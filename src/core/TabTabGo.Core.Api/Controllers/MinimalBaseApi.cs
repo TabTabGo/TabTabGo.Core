@@ -136,6 +136,7 @@ public static class SetupEntityRouters
         setEntityRouteOptions?.Invoke(options);
 
         var entityName = typeof(TEntity).Name;
+        var getScope = options.GetFixCriteria?.Compile();
         var root = "/" + options.GetRoutePrefix() + controllerName.Trim('/');
         var group = app.MapGroup(root).WithTags(entityName).RequireAuthorization();
 
@@ -297,32 +298,40 @@ public static class SetupEntityRouters
                 return TypedResults.BadRequest(ApiErrorResponses.Failure("Invalid patch document", "INVALID_PATCH_DOCUMENT", http));
             }
 
-            // looked up inside the scope: an entity outside the scope is a 404, as on GET
-            var entity = await service.GetByKey(id, fixCriteria: options.GetFixCriteria, cancellationToken: cancellationToken);
-            if (entity == null)
-            {
-                return TypedResults.NotFound(ApiErrorResponses.NotFound(entityName, id, http));
-            }
-
-            changes.ApplyTo(entity, error =>
-            {
-                if (error.Operation.OperationType != OperationType.Test &&
-                    error.Operation.OperationType != OperationType.Invalid)
-                {
-                    service.HandleJsonOperator(error.Operation, error.AffectedObject);
-                }
-            });
-
-            var validationResult = validateService != null
-                ? await validateService.Validate(entity, cancellationToken)
-                : null;
-            if (validationResult is { IsValid: false })
-            {
-                return TypedResults.BadRequest(ApiErrorResponses.Validation("Invalid patch request", "Invalid_Patch_Request".ToUpperInvariant(), validationResult, http));
-            }
-
             try
             {
+                service.EnsurePatchable(changes);
+
+                // looked up inside the scope: an entity outside the scope is a 404, as on GET
+                var entity = await service.GetByKey(id, fixCriteria: options.GetFixCriteria, cancellationToken: cancellationToken);
+                if (entity == null)
+                {
+                    return TypedResults.NotFound(ApiErrorResponses.NotFound(entityName, id, http));
+                }
+
+                changes.ApplyTo(entity, error =>
+                {
+                    if (error.Operation.OperationType != OperationType.Test &&
+                        error.Operation.OperationType != OperationType.Invalid)
+                    {
+                        service.HandleJsonOperator(error.Operation, error.AffectedObject);
+                    }
+                });
+
+                // the patch must not move the entity out of the scope it was found in; nothing is saved
+                if (getScope != null && !getScope(entity))
+                {
+                    return TypedResults.NotFound(ApiErrorResponses.NotFound(entityName, id, http));
+                }
+
+                var validationResult = validateService != null
+                    ? await validateService.Validate(entity, cancellationToken)
+                    : null;
+                if (validationResult is { IsValid: false })
+                {
+                    return TypedResults.BadRequest(ApiErrorResponses.Validation("Invalid patch request", "Invalid_Patch_Request".ToUpperInvariant(), validationResult, http));
+                }
+
                 var updated = await service.UpdateChanges(id, entity, cancellationToken);
                 var entityViewModel = mapper?.MapToViewModel(updated);
                 return TypedResults.Ok<object>(entityViewModel != null ? entityViewModel : updated);
@@ -350,14 +359,14 @@ public static class SetupEntityRouters
         {
             logger.LogDebug("REST request to delete {EntityName} : {Id}", entityName, id);
 
-            // looked up inside the scope: an entity outside the scope is a 404, as on GET
-            if (await service.GetByKey(id, fixCriteria: options.GetFixCriteria, cancellationToken: cancellationToken) == null)
-            {
-                return TypedResults.NotFound(ApiErrorResponses.NotFound(entityName, id, http));
-            }
-
             try
             {
+                // looked up inside the scope: an entity outside the scope is a 404, as on GET
+                if (await service.GetByKey(id, fixCriteria: options.GetFixCriteria, cancellationToken: cancellationToken) == null)
+                {
+                    return TypedResults.NotFound(ApiErrorResponses.NotFound(entityName, id, http));
+                }
+
                 if (!await service.CanDelete(id, cancellationToken))
                 {
                     return Json(HttpStatusCode.PreconditionFailed,

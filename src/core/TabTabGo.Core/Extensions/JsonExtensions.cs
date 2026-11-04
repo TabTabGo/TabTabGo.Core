@@ -70,7 +70,8 @@ public static class JsonExtensions
     /// <summary>
     /// Copies the properties present in the JSON object onto the target. Properties missing from the JSON are left
     /// untouched; names match case-insensitively; nested objects are merged; unknown names go to
-    /// <see cref="IEntity.ExtraProperties"/> when the target is an entity.
+    /// <see cref="IEntity.ExtraProperties"/> when the target is an entity (bounded, see <see cref="EntityPropertyGuard"/>).
+    /// On an entity the protected properties (key, audit fields, <c>IsEnabled</c>, related entities) are skipped.
     /// </summary>
     public static void Populate<T>(this JsonNode value, T target) where T : class
     {
@@ -97,13 +98,21 @@ public static class JsonExtensions
             {
                 if (target is IEntity entity)
                 {
-                    entity.ExtraProperties[name] = node.ToClrValue();
+                    var value = node.ToClrValue();
+                    EntityPropertyGuard.EnsureExtraPropertyAllowed(entity.ExtraProperties, name, value);
+                    entity.ExtraProperties[name] = value;
                 }
 
                 continue;
             }
 
             if (property.GetCustomAttribute<JsonIgnoreAttribute>() is { Condition: JsonIgnoreCondition.Always })
+            {
+                continue;
+            }
+
+            // key, audit fields, IsEnabled and related entities are never set from a client payload
+            if (target is IEntity && EntityPropertyGuard.IsProtected(type, property.Name))
             {
                 continue;
             }

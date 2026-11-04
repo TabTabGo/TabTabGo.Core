@@ -127,4 +127,15 @@ public class GenericRepositoryTests : RepositoryTestBase
         await Context.SaveChangesAsync(Ct);
         Assert.Equal(24, await Context.Products.CountAsync(Ct));
     }
+
+    [Fact]
+    public async Task Update_JsonObject_DoesNotMergeIntoTrackedRelatedEntities()
+    {
+        Repo.Update(new JsonObject { ["category"] = new JsonObject { ["name"] = "hijacked" }, ["description"] = "ok" }, p => p.Id == 1);
+        await Context.SaveChangesAsync(Ct);
+
+        await using var fresh = Db.CreateContext();
+        Assert.Equal("Hardware", fresh.Categories.Single().Name);
+        Assert.Equal("ok", fresh.Products.Find(1)!.Description);
+    }
 }

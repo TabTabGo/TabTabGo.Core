@@ -588,4 +588,76 @@ public class MapEntityRoutesTests
             return Task.FromResult<Stream>(new MemoryStream(Encoding.UTF8.GetBytes("exported")));
         }
     }
+
+    [Fact]
+    public async Task Patch_ReplaceTenant_MovingOutOfScope_Is404AndNotPersisted()
+    {
+        // the scope was checked before the patch but never after it, so a tenant could be moved to another tenant (R2)
+        await using var app = await TestApp.StartAsync(options: o => o.GetFixCriteria = p => p.Tenant == "A");
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"/tenant\",\"value\":\"B\"}]")), Ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        Assert.Equal("A", fresh.Products.Find(2)!.Tenant);
+    }
+
+    [Fact]
+    public async Task Patch_ChangeWithinScope_StillWorks()
+    {
+        await using var app = await TestApp.StartAsync(options: o => o.GetFixCriteria = p => p.Tenant == "A");
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"/name\",\"value\":\"fine\"}]")), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/id")]
+    [InlineData("/Id")]
+    [InlineData("/isEnabled")]
+    [InlineData("/createdBy")]
+    [InlineData("/updatedDate")]
+    [InlineData("/category")]
+    [InlineData("/category/name")]
+    [InlineData("/lines")]
+    public async Task Patch_ProtectedProperty_Is400AndNothingChanges(string path)
+    {
+        await using var app = await TestApp.StartAsync(withMapper: true);
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"" + path + "\",\"value\":\"x\"}]")), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("PROTECTED_PROPERTY", (await Body(response)).GetProperty("code").GetString());
+        await using var fresh = app.Db.CreateContext();
+        var product = fresh.Products.Find(2)!;
+        Assert.True(product.IsEnabled);
+        Assert.Equal("Product 02", product.Name);
+    }
+
+    [Fact]
+    public async Task Patch_MoveFromProtectedProperty_Is400()
+    {
+        await using var app = await TestApp.StartAsync();
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2",
+            Patch("[{\"op\":\"move\",\"from\":\"/id\",\"path\":\"/name\"}]")), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Patch_TooManyExtraProperties_Is400()
+    {
+        await using var app = await TestApp.StartAsync(withMapper: false, entityAsRequest: true);
+        var operations = string.Join(",", Enumerable.Range(0, 101).Select(i => "{\"op\":\"add\",\"path\":\"/k" + i + "\",\"value\":1}"));
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2", Patch("[" + operations + "]")), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("EXTRA_PROPERTIES_LIMIT", (await Body(response)).GetProperty("code").GetString());
+    }
 }

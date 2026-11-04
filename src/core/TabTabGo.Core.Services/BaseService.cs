@@ -333,6 +333,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        EnsurePatchable(entity);
         var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
         var current = await LoadRequiredAsync(id, cancellationToken, includeProperties);
 
@@ -363,6 +364,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        EnsurePatchable(entity);
         var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
         var current = await LoadRequiredAsync(id, cancellationToken, includeProperties);
         if (!IsValidToUpdate(current, out var errorMessage))
@@ -431,6 +433,46 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
 
     #endregion
 
+    /// <summary>Whether a client may not change the property; override to protect more (a tenant column, for example).</summary>
+    /// <param name="propertyName">Property name as sent by the client</param>
+    protected virtual bool IsProtectedProperty(string propertyName) => EntityPropertyGuard.IsProtected(typeof(TEntity), propertyName);
+
+    /// <inheritdoc />
+    public virtual void EnsurePatchable(JsonPatchDocument<TEntity> changes)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        foreach (var operation in changes.Operations)
+        {
+            foreach (var path in new[] { operation.path, operation.from })
+            {
+                var name = FirstSegment(path);
+                if (name != null && IsProtectedProperty(name))
+                {
+                    throw Protected(name);
+                }
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public virtual void EnsurePatchable(JsonObject changes)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        foreach (var (name, _) in changes)
+        {
+            if (IsProtectedProperty(name))
+            {
+                throw Protected(name);
+            }
+        }
+    }
+
+    private static string? FirstSegment(string? path) =>
+        path?.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+
+    private static ApiException Protected(string name) =>
+        new($"The property '{name}' cannot be changed this way.", errorNumber: 4004, statusCode: HttpStatusCode.BadRequest, code: "PROTECTED_PROPERTY");
+
     /// <summary>
     /// Handle Json Patch Operation for a path that is not a property of the entity: the value goes to
     /// <see cref="IEntity.ExtraProperties"/> (add and replace assign the value, remove deletes it).
@@ -465,6 +507,11 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         if (addToExtraProperties && currentObj is IEntity entityObj)
         {
             var value = op.value is Newtonsoft.Json.Linq.JToken token ? token.ToClrValue() : op.value;
+            if (op.OperationType is OperationType.Add or OperationType.Replace)
+            {
+                EntityPropertyGuard.EnsureExtraPropertyAllowed(entityObj.ExtraProperties, propPath, value);
+            }
+
             switch (op.OperationType)
             {
                 case OperationType.Add:

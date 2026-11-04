@@ -264,30 +264,38 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
             return (BadRequest(ModelState), null);
         }
 
-        // looked up inside the scope: an entity outside the scope is a 404, as on GET
-        var entity = await _currentService.GetByKey(id, fixCriteria: GetFixCriteria, cancellationToken: cancellationToken);
-        if (entity == null)
-        {
-            return (NotFoundEntity(id), null);
-        }
-
-        changes.ApplyTo(entity, error =>
-        {
-            if (error.Operation.OperationType != OperationType.Test &&
-                error.Operation.OperationType != OperationType.Invalid)
-            {
-                _currentService.HandleJsonOperator(error.Operation, error.AffectedObject);
-            }
-        });
-
-        var validationResult = _validateService != null ? await _validateService.Validate(entity, cancellationToken) : null;
-        if (validationResult is { IsValid: false })
-        {
-            return (BadRequestBody("Invalid patch request", "INVALID_PATCH_REQUEST", validationResult), null);
-        }
-
         try
         {
+            _currentService.EnsurePatchable(changes);
+
+            // looked up inside the scope: an entity outside the scope is a 404, as on GET
+            var entity = await _currentService.GetByKey(id, fixCriteria: GetFixCriteria, cancellationToken: cancellationToken);
+            if (entity == null)
+            {
+                return (NotFoundEntity(id), null);
+            }
+
+            changes.ApplyTo(entity, error =>
+            {
+                if (error.Operation.OperationType != OperationType.Test &&
+                    error.Operation.OperationType != OperationType.Invalid)
+                {
+                    _currentService.HandleJsonOperator(error.Operation, error.AffectedObject);
+                }
+            });
+
+            // the patch must not move the entity out of the scope it was found in; nothing is saved
+            if (OutOfScope(entity))
+            {
+                return (NotFoundEntity(id), null);
+            }
+
+            var validationResult = _validateService != null ? await _validateService.Validate(entity, cancellationToken) : null;
+            if (validationResult is { IsValid: false })
+            {
+                return (BadRequestBody("Invalid patch request", "INVALID_PATCH_REQUEST", validationResult), null);
+            }
+
             await _currentService.UpdateChanges(id, entity, cancellationToken);
 
             return (null, entity);
@@ -303,6 +311,12 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
             return (Error(HttpStatusCode.InternalServerError,
                 ApiErrorResponses.Failure($"Failed to update {EntityName}.", "UPDATE_ENTITY_FAILED", HttpContext)), null);
         }
+    }
+
+    private bool OutOfScope(TEntity entity)
+    {
+        var scope = GetFixCriteria;
+        return scope != null && !scope.Compile()(entity);
     }
 
     private static bool IsDefaultKey(TKey id) => id == null || EqualityComparer<TKey>.Default.Equals(id, default!);
@@ -344,23 +358,31 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
             return BadRequest(ModelState);
         }
 
-        // looked up inside the scope: an entity outside the scope is a 404, as on GET
-        var entity = await _currentService.GetByKey(id, fixCriteria: GetFixCriteria, cancellationToken: cancellationToken);
-        if (entity == null)
-        {
-            return NotFoundEntity(id);
-        }
-
-        changes.Populate(entity);
-
-        var validationResult = _validateService != null ? await _validateService.Validate(entity, cancellationToken) : null;
-        if (validationResult is { IsValid: false })
-        {
-            return BadRequestBody("Invalid patch request", "INVALID_PATCH_REQUEST", validationResult);
-        }
-
         try
         {
+            _currentService.EnsurePatchable(changes);
+
+            // looked up inside the scope: an entity outside the scope is a 404, as on GET
+            var entity = await _currentService.GetByKey(id, fixCriteria: GetFixCriteria, cancellationToken: cancellationToken);
+            if (entity == null)
+            {
+                return NotFoundEntity(id);
+            }
+
+            changes.Populate(entity);
+
+            // the patch must not move the entity out of the scope it was found in; nothing is saved
+            if (OutOfScope(entity))
+            {
+                return NotFoundEntity(id);
+            }
+
+            var validationResult = _validateService != null ? await _validateService.Validate(entity, cancellationToken) : null;
+            if (validationResult is { IsValid: false })
+            {
+                return BadRequestBody("Invalid patch request", "INVALID_PATCH_REQUEST", validationResult);
+            }
+
             await _currentService.UpdateChanges(id, entity, cancellationToken);
 
             return Ok(entity);

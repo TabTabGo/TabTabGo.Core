@@ -41,6 +41,25 @@ public interface IBaseService<TEntity, TKey> : IBaseReadService<TEntity, TKey> w
     /// <param name="affectedObject">The object to change</param>
     void HandleJsonOperator(Operation operation, object affectedObject);
 
+    /// <summary>
+    /// Rejects a JSON Patch document that touches a protected property (key, audit fields, <c>IsEnabled</c>, related
+    /// entities). The default implementation accepts everything; <c>BaseService</c> enforces the rule.
+    /// </summary>
+    /// <param name="changes">The patch document</param>
+    /// <exception cref="Exceptions.ApiException">A protected property is patched (400)</exception>
+    void EnsurePatchable(JsonPatchDocument<TEntity> changes)
+    {
+    }
+
+    /// <summary>
+    /// Rejects a partial JSON object that names a protected property. The default implementation accepts everything.
+    /// </summary>
+    /// <param name="changes">The partial entity</param>
+    /// <exception cref="Exceptions.ApiException">A protected property is named (400)</exception>
+    void EnsurePatchable(JsonObject changes)
+    {
+    }
+
     #endregion
 
     /// <summary>Creates an entity.</summary>

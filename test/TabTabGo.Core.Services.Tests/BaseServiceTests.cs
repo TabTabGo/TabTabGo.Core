@@ -479,4 +479,68 @@ public class BaseServiceTests : ServiceTestBase
 
         public bool Reference(Type type) => IsReferenceProperty(type);
     }
+
+    [Theory]
+    [InlineData("/id")]
+    [InlineData("/isEnabled")]
+    [InlineData("/createdDate")]
+    [InlineData("/category/name")]
+    public async Task Update_JsonPatch_ProtectedProperty_Is400(string path)
+    {
+        var patch = new JsonPatchDocument<Product>();
+        patch.Operations.Add(new Operation<Product>("replace", path, null, "x"));
+
+        var ex = await Api(() => Service.Update(6, patch, Ct));
+
+        Assert.Equal(HttpStatusCode.BadRequest, ex.HttpStatusCode);
+        Assert.Equal("PROTECTED_PROPERTY", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Update_JsonObject_ProtectedProperty_Is400_RelatedRowUntouched()
+    {
+        var ex = await Api(() => Service.Update(7, new JsonObject { ["category"] = new JsonObject { ["name"] = "renamed" } }, Ct));
+
+        Assert.Equal(HttpStatusCode.BadRequest, ex.HttpStatusCode);
+        await using var fresh = Db.CreateContext();
+        Assert.Equal("Hardware", fresh.Categories.Single().Name);
+    }
+
+    [Fact]
+    public void EnsurePatchable_AllowsOrdinaryProperties_AndSubclassesCanProtectMore()
+    {
+        var patch = new JsonPatchDocument<Product>();
+        patch.Replace(p => p.Name, "x");
+
+        Service.EnsurePatchable(patch);
+        Service.EnsurePatchable(new JsonObject { ["name"] = "x" });
+        Assert.Throws<ApiException>(() => new StrictService(UnitOfWork).EnsurePatchable(new JsonObject { ["tenant"] = "B" }));
+        Assert.Throws<ArgumentNullException>(() => Service.EnsurePatchable((JsonObject)null!));
+        Assert.Throws<ArgumentNullException>(() => Service.EnsurePatchable((JsonPatchDocument<Product>)null!));
+    }
+
+    [Fact]
+    public void HandleJsonOperator_ExtraPropertyLimits()
+    {
+        var product = new Product();
+        for (var i = 0; i < 100; i++)
+        {
+            Service.HandleJsonOperator(new Operation("add", "/k" + i, null, i), product);
+        }
+
+        Assert.Throws<ApiException>(() => Service.HandleJsonOperator(new Operation("add", "/one-too-many", null, 1), product));
+        Service.HandleJsonOperator(new Operation("replace", "/k5", null, "still allowed"), product); // existing key
+        Assert.Throws<ApiException>(() => Service.HandleJsonOperator(new Operation("replace", "/k6", null, new string('x', 20_000)), product));
+    }
+
+    private sealed class StrictService(TabTabGo.Core.Data.IUnitOfWork unitOfWork)
+        : BaseService<Product, int>(unitOfWork, NullLogger<BaseService<Product, int>>.Instance)
+    {
+        public override System.Linq.Expressions.Expression<Func<Product, bool>> GetKeyPredicate(int id) => p => p.Id == id;
+
+        public override int GetKey(Product entity) => entity.Id;
+
+        protected override bool IsProtectedProperty(string propertyName) =>
+            propertyName.Equals("Tenant", StringComparison.OrdinalIgnoreCase) || base.IsProtectedProperty(propertyName);
+    }
 }

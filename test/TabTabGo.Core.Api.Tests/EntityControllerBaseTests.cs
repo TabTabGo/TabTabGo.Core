@@ -455,4 +455,61 @@ public class EntityControllerBaseTests
         public override Task<Stream> ExportFile<TResult>(TabTabGo.Core.ViewModels.ExportConfiguration config, object oDataQueryOptions, System.Linq.Expressions.Expression<Func<Product, bool>>? fixCriteria = null, string[]? includeProperties = null, CancellationToken cancellationToken = default) =>
             Task.FromResult<Stream>(new MemoryStream(Encoding.UTF8.GetBytes("exported")));
     }
+
+    [Fact]
+    public async Task Patch_ReplaceTenant_MovingOutOfScope_Is404AndNotPersisted()
+    {
+        await using var app = await Start();
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"/tenant\",\"value\":\"B\"}]"), tenant: "A"), Ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        Assert.Equal("A", fresh.Products.Find(2)!.Tenant);
+    }
+
+    [Theory]
+    [InlineData("/id")]
+    [InlineData("/isEnabled")]
+    [InlineData("/createdBy")]
+    [InlineData("/category/name")]
+    public async Task Patch_ProtectedProperty_Is400(string path)
+    {
+        await using var app = await Start();
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"" + path + "\",\"value\":\"x\"}]")), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchJson_ChangingTheTenant_IsRejectedAndNotPersisted()
+    {
+        await using var app = await Start();
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/json/2", Json("{\"tenant\":\"B\"}"), tenant: "A"), Ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        Assert.Equal("A", fresh.Products.Find(2)!.Tenant);
+    }
+
+    [Theory]
+    [InlineData("{\"category\":{\"name\":\"x\"}}")]
+    [InlineData("{\"id\":99}")]
+    [InlineData("{\"isEnabled\":false}")]
+    [InlineData("{\"createdBy\":\"me\"}")]
+    public async Task PatchJson_ProtectedProperty_Is400_RelatedRowUntouched(string body)
+    {
+        await using var app = await Start();
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/json/2", Json(body)), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        Assert.Equal("Hardware", fresh.Categories.Single().Name);
+        Assert.True(fresh.Products.Find(2)!.IsEnabled);
+    }
 }

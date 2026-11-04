@@ -338,6 +338,11 @@ public class ExtensionsTests
         Assert.Throws<ArgumentNullException>(() => source.CopyObject(typeof(Holder), null!));
     }
 
+    public class Parent : Entity
+    {
+        public Person? Child { get; set; }
+    }
+
     public class Holder
     {
         public Person? Inner { get; set; }
@@ -551,5 +556,66 @@ public class ExtensionsTests
         {
             CultureInfo.CurrentCulture = original;
         }
+    }
+
+    [Fact]
+    public void Populate_ProtectedEntityProperties_AreSkipped()
+    {
+        var parent = new Parent { Child = new Person { Name = "keep" } };
+        var person = new Person { Name = "n", IsEnabled = true, CreatedBy = "creator" };
+        var before = person.CreatedDate;
+
+        JsonNode.Parse("{\"id\":5,\"isEnabled\":false,\"createdBy\":\"me\",\"createdDate\":\"2001-01-01T00:00:00Z\",\"name\":\"changed\"}")!.Populate(person);
+        JsonNode.Parse("{\"child\":{\"name\":\"hijack\"}}")!.Populate(parent);
+
+        Assert.Equal("changed", person.Name);
+        Assert.True(person.IsEnabled);
+        Assert.Equal("creator", person.CreatedBy);
+        Assert.Equal(before, person.CreatedDate);
+        Assert.Equal("keep", parent.Child!.Name); // a related entity is not merged into through its parent
+    }
+
+    [Fact]
+    public void Populate_NonEntityTarget_KeepsIdAndNestedMerge()
+    {
+        var address = new Address { City = "A" };
+
+        JsonNode.Parse("{\"city\":\"B\"}")!.Populate(address);
+
+        Assert.Equal("B", address.City);
+    }
+
+    [Fact]
+    public void Populate_ExtraProperties_AreBounded()
+    {
+        var person = new Person();
+        var tooMany = new JsonObject();
+        for (var i = 0; i < 101; i++)
+        {
+            tooMany["k" + i] = i;
+        }
+
+        Assert.Throws<TabTabGo.Core.Exceptions.ApiException>(() => tooMany.Populate(person));
+        Assert.Throws<TabTabGo.Core.Exceptions.ApiException>(() => new JsonObject { [new string('k', 101)] = 1 }.Populate(new Person()));
+        Assert.Throws<TabTabGo.Core.Exceptions.ApiException>(() => new JsonObject { ["big"] = new string('x', 20_000) }.Populate(new Person()));
+        Assert.Throws<TabTabGo.Core.Exceptions.ApiException>(() => new JsonObject { ["bigObject"] = new JsonObject { ["a"] = new string('x', 20_000) } }.Populate(new Person()));
+        var other = new Person();
+        new JsonObject { ["fine"] = "ok" }.Populate(other);
+        Assert.Equal("ok", other.ExtraProperties["fine"]);
+    }
+
+    [Fact]
+    public void EntityPropertyGuard_ProtectedSet()
+    {
+        Assert.True(EntityPropertyGuard.IsProtected(typeof(Person), "id"));
+        Assert.True(EntityPropertyGuard.IsProtected(typeof(Person), "PersonId"));
+        Assert.True(EntityPropertyGuard.IsProtected(typeof(Person), "CREATEDBY"));
+        Assert.True(EntityPropertyGuard.IsProtected(typeof(Parent), "Child"));
+        Assert.False(EntityPropertyGuard.IsProtected(typeof(Person), "Name"));
+        Assert.False(EntityPropertyGuard.IsProtected(typeof(Person), ""));
+        Assert.Contains("IsEnabled", EntityPropertyGuard.ProtectedProperties(typeof(Person)));
+        Assert.Throws<ArgumentNullException>(() => EntityPropertyGuard.IsProtected(null!, "x"));
+        Assert.Throws<ArgumentNullException>(() => EntityPropertyGuard.ProtectedProperties(null!));
+        Assert.Throws<ArgumentNullException>(() => EntityPropertyGuard.EnsureExtraPropertyAllowed(null!, "k", 1));
     }
 }
