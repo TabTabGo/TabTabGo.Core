@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 using TabTabGo.Core.Exceptions;
 using TabTabGo.Core.ViewModels;
@@ -12,6 +13,12 @@ namespace TabTabGo.Core.Services.OData;
 /// </summary>
 internal static class ODataFilterTokenizer
 {
+    /// <summary>Longest filter, in characters, that is taken apart. A longer one is rejected with 400 (nothing legitimate is that long).</summary>
+    internal const int MaxFilterLength = 4096;
+
+    /// <summary>Deepest nesting of groups and <c>not</c>s that is accepted; the parser is recursive, so this bounds its stack.</summary>
+    internal const int MaxDepth = 32;
+
     private static int _calls;
 
     /// <summary>How many times <see cref="Split"/> ran in this process (lets tests prove that standard filters bypass it).</summary>
@@ -33,14 +40,107 @@ internal static class ODataFilterTokenizer
         Interlocked.Increment(ref _calls);
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(customFunctions);
-        var parser = new Parser(filter, customFunctions);
-        var root = parser.ParseExpression();
-        parser.EnsureEnd();
+        if (filter.Length > MaxFilterLength)
+        {
+            throw Reject($"The filter is longer than {MaxFilterLength} characters.");
+        }
+
+        Node root;
+        try
+        {
+            var parser = new Parser(filter, customFunctions);
+            root = parser.ParseExpression();
+            parser.EnsureEnd();
+        }
+        catch (InsufficientExecutionStackException)
+        {
+            // the depth limit is the normal guard; this is the backstop for a stack that is already nearly used up
+            throw Reject("The filter is nested too deeply.");
+        }
 
         var found = new List<CustomOdataFiler>();
         var rendered = Render(root, found, underOrOrNot: false);
         return new Result(rendered ?? string.Empty, found);
     }
+
+    /// <summary>
+    /// True when the filter calls one of the functions (name, optional spaces, an opening parenthesis), outside string literals
+    /// and not as the tail of a longer name. A single linear scan: no recursion, so it is safe on any input.
+    /// </summary>
+    /// <param name="filter">Raw <c>$filter</c> value</param>
+    /// <param name="customFunctions">Function names, case-insensitive</param>
+    internal static bool ContainsCustomFunction(string filter, IReadOnlyCollection<string> customFunctions)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(customFunctions);
+        var i = 0;
+        while (i < filter.Length)
+        {
+            var c = filter[i];
+            if (c == '\'' || c == '"')
+            {
+                i++;
+                while (i < filter.Length)
+                {
+                    if (filter[i] == c)
+                    {
+                        if (i + 1 < filter.Length && filter[i + 1] == c)
+                        {
+                            i += 2;
+                            continue;
+                        }
+
+                        break;
+                    }
+
+                    i++;
+                }
+
+                i++;
+                continue;
+            }
+
+            if (char.IsLetter(c) && (i == 0 || !(char.IsLetterOrDigit(filter[i - 1]) || filter[i - 1] is '_' or '.' or '/')))
+            {
+                var end = i;
+                while (end < filter.Length && (char.IsLetterOrDigit(filter[end]) || filter[end] == '_'))
+                {
+                    end++;
+                }
+
+                var word = filter.AsSpan(i, end - i);
+                var next = end;
+                while (next < filter.Length && char.IsWhiteSpace(filter[next]))
+                {
+                    next++;
+                }
+
+                if (next < filter.Length && filter[next] == '(')
+                {
+                    foreach (var name in customFunctions)
+                    {
+                        if (word.Equals(name, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                i = end;
+                continue;
+            }
+
+            i++;
+        }
+
+        return false;
+    }
+
+    private static ApiException Reject(string message) =>
+        new($"Invalid $filter. {message}", statusCode: System.Net.HttpStatusCode.BadRequest, code: "InvalidFilter");
+
+    /// <summary>Marks the depth rejection so the group back-tracking in the parser lets it through instead of retrying.</summary>
+    private const string TooDeepKey = "tooDeep";
 
     private abstract record Node;
 
@@ -102,6 +202,7 @@ internal static class ODataFilterTokenizer
     private sealed class Parser(string text, IReadOnlyCollection<string> customFunctions)
     {
         private int _position;
+        private int _depth;
 
         internal Node ParseExpression()
         {
@@ -152,13 +253,33 @@ internal static class ODataFilterTokenizer
                 var closesCondition = _position >= text.Length || text[_position] == ')' || NextWordIs("and") || NextWordIs("or");
                 return closesCondition ? new Group(inner) : null;
             }
-            catch (ApiException)
+            catch (ApiException ex) when (!ex.Data.Contains(TooDeepKey))
             {
                 return null;
             }
         }
 
         private Node ParseFactor()
+        {
+            if (++_depth > MaxDepth)
+            {
+                var tooDeep = Reject($"The filter is nested more than {MaxDepth} levels deep.");
+                tooDeep.Data[TooDeepKey] = true;
+                throw tooDeep;
+            }
+
+            RuntimeHelpers.EnsureSufficientExecutionStack();
+            try
+            {
+                return ParseFactorCore();
+            }
+            finally
+            {
+                _depth--;
+            }
+        }
+
+        private Node ParseFactorCore()
         {
             SkipWhitespace();
             if (TryConsumeKeyword("not"))

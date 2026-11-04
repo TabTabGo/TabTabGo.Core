@@ -180,4 +180,114 @@ public class ODataFilterTokenizerTests
 
         Assert.Equal("((A add 1) gt 2 or B eq 1)", result.Filter);
     }
+
+    // C1: a hostile $filter must never reach unbounded recursion
+
+    private static void RunOnSmallStack(Action action)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+            }
+        }, 256 * 1024);
+        thread.Start();
+        thread.Join();
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException(failure.ToString());
+        }
+    }
+
+    [Theory]
+    [InlineData(33)]
+    [InlineData(1_000)]
+    public void Split_GroupsNestedTooDeeply_Rejects400OnSmallStack(int depth)
+    {
+        var filter = new string('(', depth) + "A eq 1" + new string(')', depth);
+
+        RunOnSmallStack(() =>
+        {
+            var ex = Assert.Throws<ApiException>(() => Split(filter));
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, ex.HttpStatusCode);
+        });
+    }
+
+    [Fact]
+    public void Split_ManyNotsAndParensUnclosed_Rejects400OnSmallStack()
+    {
+        var filter = string.Concat(Enumerable.Repeat("not (", 10_000));
+
+        RunOnSmallStack(() =>
+        {
+            var ex = Assert.Throws<ApiException>(() => Split(filter));
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, ex.HttpStatusCode);
+        });
+    }
+
+    [Fact]
+    public void Split_NestingAtTheLimit_StillParses()
+    {
+        var filter = new string('(', 10) + "A eq 1" + new string(')', 10) + " and xmlExist(a,'v')";
+
+        var result = Split(filter);
+
+        Assert.Single(result.CustomFilters);
+    }
+
+    [Fact]
+    public void Split_FilterLongerThanCap_Rejects400()
+    {
+        var filter = "A eq '" + new string('x', 1_000_000) + "'";
+
+        var ex = Assert.Throws<ApiException>(() => Split(filter));
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, ex.HttpStatusCode);
+    }
+
+    [Fact]
+    public void Split_FilterJustUnderCap_Parses()
+    {
+        var filter = "A eq '" + new string('x', ODataFilterTokenizer.MaxFilterLength - 10) + "'";
+
+        var result = Split(filter);
+
+        Assert.Equal(filter, result.Filter);
+    }
+
+    [Theory]
+    [InlineData("xmlExist(a,'v')", true)]
+    [InlineData("A eq 1 and XMLEXIST (a,'v')", true)]
+    [InlineData("Name eq 'xmlExist(' and A eq 1", false)]
+    [InlineData("Name eq \"xmlExist(a)\"", false)]
+    [InlineData("Name eq 'it''s xmlExist(x)'", false)]
+    [InlineData("Name eq 'xmlExist'", false)]
+    [InlineData("myxmlExist(a)", false)]
+    [InlineData("x.xmlExist(a)", false)]
+    [InlineData("xmlExist", false)]
+    [InlineData("", false)]
+    public void ContainsCustomFunction_ChecksCallsOutsideLiterals(string filter, bool expected)
+    {
+        Assert.Equal(expected, ODataFilterTokenizer.ContainsCustomFunction(filter, Custom));
+    }
+
+    [Fact]
+    public void ContainsCustomFunction_HugeInput_NoRecursion()
+    {
+        RunOnSmallStack(() =>
+            Assert.False(ODataFilterTokenizer.ContainsCustomFunction(new string('(', 1_000_000), Custom)));
+    }
+
+    [Fact]
+    public void ContainsCustomFunction_NullArguments_Throw()
+    {
+        Assert.Throws<ArgumentNullException>(() => ODataFilterTokenizer.ContainsCustomFunction(null!, Custom));
+        Assert.Throws<ArgumentNullException>(() => ODataFilterTokenizer.ContainsCustomFunction("a", null!));
+    }
 }

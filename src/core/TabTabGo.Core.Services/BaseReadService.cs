@@ -520,7 +520,7 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
         }
 
         // standard filters go to OData untouched: only a filter that names a custom function is taken apart
-        if (!CustomFunctions.Any(f => query.Filter.RawValue.Contains(f, StringComparison.OrdinalIgnoreCase)))
+        if (!ODataFilterTokenizer.ContainsCustomFunction(query.Filter.RawValue, CustomFunctions))
         {
             return (query.Filter, null);
         }
