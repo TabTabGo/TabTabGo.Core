@@ -15,6 +15,11 @@ public class Product : Entity
 
     public string Tenant { get; set; } = "A";
 
+    /// <summary>Numeric tenant column with aliases, for protection tests.</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("tenant_id")]
+    [Newtonsoft.Json.JsonProperty("tenant_id")]
+    public int TenantId { get; set; }
+
     public int? CategoryId { get; set; }
 
     public Category? Category { get; set; }

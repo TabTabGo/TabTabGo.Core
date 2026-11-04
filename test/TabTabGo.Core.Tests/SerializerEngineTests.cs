@@ -132,7 +132,7 @@ public class SerializerEngineTests
     }
 
     [Fact]
-    public void XmlToJson_XmlNode_NoLongerRecursesForever()
+    public void XmlToJson_XmlNode_Converts()
     {
         var doc = new XmlDocument();
         doc.LoadXml("<root><a>1</a></root>");
@@ -251,7 +251,7 @@ public class SerializerEngineTests
     // --- enums ------------------------------------------------------------------------------------------------------
 
     [Fact]
-    public void EnumToJson_Type_ReturnsIdNameArray()
+    public void EnumToJson_ReturnsIdNameArray()
     {
         // used to throw RuntimeBinderException (D-15)
         var json = JsonNode.Parse(SerializerEngine.EnumToJson(typeof(Level)))!.AsArray();

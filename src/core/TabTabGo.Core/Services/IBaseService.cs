@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.JsonPatch.Operations;
 
@@ -35,6 +36,26 @@ public interface IBaseService<TEntity, TKey> : IBaseReadService<TEntity, TKey> w
     /// <param name="entity">Partial entity as JSON</param>
     /// <param name="cancellationToken">Cancellation token</param>
     Task<TEntity> Update(TKey id, JsonObject entity, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Saves the changes made to an entity this service loaded, and only keeps them when the entity is still inside
+    /// <paramref name="scope"/> afterwards (checked in the database, so foreign keys and navigations count). When it left the
+    /// scope the changes are rolled back and a 404 <c>ApiException</c> is thrown. The default implementation ignores the scope.
+    /// </summary>
+    /// <param name="id">Entity key</param>
+    /// <param name="entity">The changed entity</param>
+    /// <param name="scope">Scope the entity must stay in; null means no scope</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<TEntity> UpdateChanges(TKey id, TEntity entity, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+        => UpdateChanges(id, entity, cancellationToken);
+
+    /// <summary>
+    /// Merges a partial JSON object into an entity the way <see cref="Update(TKey, JsonObject, CancellationToken)"/> does
+    /// (protected properties are skipped, extra properties are bounded). The default implementation uses the default rules.
+    /// </summary>
+    /// <param name="changes">The partial entity</param>
+    /// <param name="entity">The entity to change</param>
+    void ApplyJson(JsonObject changes, TEntity entity) => Extensions.JsonExtensions.Populate(changes, entity);
 
     /// <summary>Applies one JSON patch operation to an object.</summary>
     /// <param name="operation">The operation</param>

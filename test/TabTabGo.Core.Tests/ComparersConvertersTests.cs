@@ -269,7 +269,7 @@ public class ComparersConvertersTests
     private static JsonSerializerOptions TimeOptions() => new() { Converters = { new TimespanToSecondsConverter() } };
 
     [Fact]
-    public void TimespanToSecondsConverter_WritesANumber_AndRoundTrips()
+    public void RoundTrip()
     {
         var json = JsonSerializer.Serialize(TimeSpan.FromSeconds(90.5), TimeOptions());
 
@@ -278,7 +278,7 @@ public class ComparersConvertersTests
     }
 
     [Fact]
-    public void TimespanToSecondsConverter_ReadsTheLegacyStringForm_CultureInvariant()
+    public void ReadsLegacyString()
     {
         var original = CultureInfo.CurrentCulture;
         try
@@ -288,6 +288,22 @@ public class ComparersConvertersTests
             Assert.Equal("1.5", JsonSerializer.Serialize(TimeSpan.FromSeconds(1.5), TimeOptions()));
             Assert.Equal(TimeSpan.FromSeconds(1.5), JsonSerializer.Deserialize<TimeSpan>("\"1.5\"", TimeOptions()));
             Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<TimeSpan>("\"abc\"", TimeOptions()));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+    }
+
+    [Fact]
+    public void CultureInvariant()
+    {
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+
+            Assert.Equal("1.5", JsonSerializer.Serialize(TimeSpan.FromSeconds(1.5), TimeOptions()));
         }
         finally
         {

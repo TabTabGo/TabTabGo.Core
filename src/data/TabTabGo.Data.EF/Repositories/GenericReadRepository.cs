@@ -20,7 +20,7 @@ namespace TabTabGo.Data.EF.Repositories;
 public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRepository<TEntity, TKey>
     where TEntity : class
 {
-    private static readonly MethodInfo EfPropertyMethod = typeof(Microsoft.EntityFrameworkCore.EF).GetMethod(nameof(Microsoft.EntityFrameworkCore.EF.Property))!;
+    private static readonly MethodInfo EfPropertyMethod = typeof(Microsoft.EntityFrameworkCore.EF).GetMethod(nameof(Microsoft.EntityFrameworkCore.EF.Property))!; // justified: EF.Property is a public static method of EF
 
     private static readonly MethodInfo OrderByMethod = typeof(Queryable).GetMethods()
         .Single(m => m.Name == nameof(Queryable.OrderBy) && m.GetParameters().Length == 2);
@@ -90,7 +90,9 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(pageNumber);
-        var query = GetQueryable(includeProperties, (flags ?? 0) | QueryFlags.DisableTracking);
+        // paged reads are untracked unless the caller asks for tracking
+        var effective = flags ?? 0;
+        var query = GetQueryable(includeProperties, effective.HasFlag(QueryFlags.EnableTracking) ? effective : effective | QueryFlags.DisableTracking);
 
         if (filter != null)
         {
@@ -499,7 +501,7 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
             queryable = queryable.AsExpandable();
         }
 
-        if (flags.HasValue && flags.Value.HasFlag(QueryFlags.DisableTracking))
+        if (flags.HasValue && flags.Value.HasFlag(QueryFlags.DisableTracking) && !flags.Value.HasFlag(QueryFlags.EnableTracking))
         {
             queryable = queryable.AsNoTracking();
         }
@@ -515,6 +517,30 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
     #endregion
 
     #region Key helpers
+
+    /// <inheritdoc />
+    public virtual Expression<Func<TEntity, bool>>? GetKeysPredicate(IEnumerable<TKey> keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        var keyProperty = SingleKeyProperty();
+        if (keyProperty.ClrType != typeof(TKey))
+        {
+            return null;
+        }
+
+        var parameter = Expression.Parameter(typeof(TEntity), "e");
+        var access = Expression.Call(EfPropertyMethod.MakeGenericMethod(keyProperty.ClrType), parameter, Expression.Constant(keyProperty.Name));
+        var list = keys.Distinct().ToList();
+        var contains = Expression.Call(typeof(Enumerable), nameof(Enumerable.Contains), new[] { typeof(TKey) }, Expression.Constant(list), access);
+        return Expression.Lambda<Func<TEntity, bool>>(contains, parameter);
+    }
+
+    /// <inheritdoc />
+    public virtual IQueryable<TEntity> ApplyKeyOrder(IQueryable<TEntity> queryable)
+    {
+        ArgumentNullException.ThrowIfNull(queryable);
+        return OrderByPrimaryKey(queryable);
+    }
 
     /// <summary>
     /// Builds <c>e =&gt; e.Key == key</c> from the EF key metadata. Only single-property keys are supported.
@@ -557,11 +583,11 @@ public class GenericReadRepository<TEntity, TKey> : IDisposable, IGenericReadRep
             var access = Expression.Call(EfPropertyMethod.MakeGenericMethod(keyProperty.ClrType), parameter, Expression.Constant(keyProperty.Name));
             var lambda = Expression.Lambda(access, parameter);
             ordered = ordered == null
-                ? (IOrderedQueryable<TEntity>)OrderByMethod.MakeGenericMethod(typeof(TEntity), keyProperty.ClrType).Invoke(null, new object[] { query, lambda })!
-                : (IOrderedQueryable<TEntity>)ThenByMethod.MakeGenericMethod(typeof(TEntity), keyProperty.ClrType).Invoke(null, new object[] { ordered, lambda })!;
+                ? (IOrderedQueryable<TEntity>)OrderByMethod.MakeGenericMethod(typeof(TEntity), keyProperty.ClrType).Invoke(null, new object[] { query, lambda })! // justified: the reflected LINQ method always returns an IOrderedQueryable
+                : (IOrderedQueryable<TEntity>)ThenByMethod.MakeGenericMethod(typeof(TEntity), keyProperty.ClrType).Invoke(null, new object[] { ordered, lambda })!; // justified: the reflected LINQ method always returns an IOrderedQueryable
         }
 
-        return ordered!;
+        return ordered!; // justified: the primary key has at least one property, so the loop assigned it
     }
 
     private static readonly MethodInfo ThenByMethod = typeof(Queryable).GetMethods()

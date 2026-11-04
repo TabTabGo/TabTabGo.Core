@@ -59,4 +59,32 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
 
 /// <summary>Unit of work over <see cref="TestDbContext"/>.</summary>
 public class TestUnitOfWork(DbContext context, bool ownsContext = false)
-    : UnitOfWork(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<UnitOfWork>.Instance, ownsContext);
+    : UnitOfWork(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<UnitOfWork>.Instance, ownsContext)
+{
+    /// <summary>The protected context, for tests.</summary>
+    public DbContext ExposedContext => Context;
+}
+
+/// <summary>Records the SQL of every command a context runs.</summary>
+public class CommandCapture : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+{
+    public List<string> Commands { get; } = new();
+
+    public IEnumerable<string> Selects => Commands.Where(c => c.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase));
+
+    public override Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> ReaderExecuting(
+        System.Data.Common.DbCommand command, Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+        Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> result)
+    {
+        Commands.Add(command.CommandText);
+        return result;
+    }
+
+    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(
+        System.Data.Common.DbCommand command, Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+        Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> result, CancellationToken cancellationToken = default)
+    {
+        Commands.Add(command.CommandText);
+        return ValueTask.FromResult(result);
+    }
+}

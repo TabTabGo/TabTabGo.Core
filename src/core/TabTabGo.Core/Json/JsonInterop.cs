@@ -80,14 +80,14 @@ public static class JsonInterop
     public static JsonObject ToJsonObject(this NjLinq.JObject obj)
     {
         ArgumentNullException.ThrowIfNull(obj);
-        return (JsonObject)obj.ToJsonNode()!;
+        return (JsonObject)obj.ToJsonNode()!; // justified: an object or array token never converts to null
     }
 
     /// <summary>Converts a <see cref="NjLinq.JArray"/> to a <see cref="JsonArray"/>.</summary>
     public static JsonArray ToJsonArray(this NjLinq.JArray array)
     {
         ArgumentNullException.ThrowIfNull(array);
-        return (JsonArray)array.ToJsonNode()!;
+        return (JsonArray)array.ToJsonNode()!; // justified: an object or array token never converts to null
     }
 
     /// <summary>Converts a Newtonsoft token to a <see cref="JsonDocument"/>. The caller disposes it.</summary>

@@ -148,6 +148,28 @@ public interface IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
         string[]? includeProperties = null,
         CancellationToken cancellationToken = default) where TResult : class;
     /// <summary>
+    /// Counts how many of the keys exist inside the given scope (one query). Use it to check that a bulk request names
+    /// only entities the caller may reach. The default implementation looks the keys up one by one.
+    /// </summary>
+    /// <param name="ids">The keys</param>
+    /// <param name="fixCriteria">Scope criteria; null means no scope</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    async Task<int> CountByKeys(IEnumerable<TKey> ids, Expression<Func<TEntity, bool>>? fixCriteria = null,
+        CancellationToken cancellationToken = default)
+    {
+        var count = 0;
+        foreach (var id in ids.Distinct())
+        {
+            if (await GetByKey(id, fixCriteria: fixCriteria, cancellationToken: cancellationToken).ConfigureAwait(false) != null)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
     /// Get the key predicate for the entity
     /// </summary>
     /// <param name="id"></param>

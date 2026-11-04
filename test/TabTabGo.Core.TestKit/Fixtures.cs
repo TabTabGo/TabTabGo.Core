@@ -21,9 +21,14 @@ public sealed class SqliteFixture : IDisposable
 
     public SqliteConnection Connection => _connection;
 
-    public TestDbContext CreateContext(bool logSql = false)
+    public TestDbContext CreateContext(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
     {
         var builder = new DbContextOptionsBuilder<TestDbContext>().UseSqlite(_connection);
+        if (interceptors.Length > 0)
+        {
+            builder.AddInterceptors(interceptors);
+        }
+
         return new TestDbContext(builder.Options);
     }
 

@@ -170,7 +170,7 @@ public static class SerializerEngine
             }
             else
             {
-                jsonObject[name] = new JsonArray(existing!.DeepClone(), value);
+                jsonObject[name] = new JsonArray(existing!.DeepClone(), value); // justified: the property exists, TryGetPropertyValue just returned true
             }
         }
 
@@ -186,7 +186,7 @@ public static class SerializerEngine
 
         if (!element.HasAttributes)
         {
-            return JsonValue.Create(element.Value)!;
+            return JsonValue.Create(element.Value)!; // justified: Create returns null only for a null argument, and Value is never null
         }
 
         var jsonObject = new JsonObject();
@@ -463,6 +463,12 @@ public static class SerializerEngine
 
             if (TryGetIndex(tokens[t + 1], out var index))
             {
+                // the index comes from a key the caller sent: it must not be able to allocate an arbitrarily large array
+                if (index > MaxArrayIndex)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(tokens), index, $"An array index above {MaxArrayIndex} is not accepted.");
+                }
+
                 if (current[name] is not JsonArray array)
                 {
                     array = new JsonArray();
@@ -502,6 +508,9 @@ public static class SerializerEngine
             }
         }
     }
+
+    /// <summary>Largest array index <see cref="MapToJsonObject"/> accepts; lower indexes pad the array with nulls.</summary>
+    public const int MaxArrayIndex = 10_000;
 
     private static bool TryGetIndex(string token, out int index) =>
         int.TryParse(token, NumberStyles.None, CultureInfo.InvariantCulture, out index);

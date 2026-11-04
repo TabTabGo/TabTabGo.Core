@@ -16,5 +16,10 @@ public enum QueryFlags
     IsExpandable = 4,
 
     /// <summary>Use the context-local (tracked) entities.</summary>
-    UseLocal = 8
+    UseLocal = 8,
+
+    /// <summary>
+    /// Track the entities. Paged reads (repository pages and OData reads) are untracked unless this flag is given.
+    /// </summary>
+    EnableTracking = 16
 }

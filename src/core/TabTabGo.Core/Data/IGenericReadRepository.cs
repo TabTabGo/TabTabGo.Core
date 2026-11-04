@@ -345,6 +345,20 @@ public interface IGenericReadRepository<TEntity, in TKey> : IDisposable where TE
     IQueryable<TEntity> SetFlags(IQueryable<TEntity> queryable, QueryFlags? flags);
 
     /// <summary>
+    /// Builds a predicate that matches any of the keys, from the key metadata of the store (a single
+    /// <c>IN</c> list, not a tree of <c>OR</c>s). The default implementation returns null, which makes the caller fall
+    /// back to its own key predicate.
+    /// </summary>
+    /// <param name="keys">The keys</param>
+    Expression<Func<TEntity, bool>>? GetKeysPredicate(IEnumerable<TKey> keys) => null;
+
+    /// <summary>
+    /// Orders a query by the primary key so that paging is deterministic. The default implementation returns the query as is.
+    /// </summary>
+    /// <param name="queryable">The query</param>
+    IQueryable<TEntity> ApplyKeyOrder(IQueryable<TEntity> queryable) => queryable;
+
+    /// <summary>
     /// Counts the rows of a query asynchronously. The default implementation counts synchronously;
     /// EF implementations count in the database. Lets services without an EF reference stay async.
     /// </summary>

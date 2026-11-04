@@ -101,7 +101,7 @@ public class ModelsAndUtilitiesTests
     }
 
     [Fact]
-    public void GeneralResponse_ExtraFlattened_BothEngines()
+    public void GeneralResponse_ExtraFlattened()
     {
         var response = new GeneralResponse("m", null) { Extra = { ["token"] = "t", ["n"] = 2 } };
 
@@ -226,7 +226,7 @@ public class ModelsAndUtilitiesTests
     }
 
     [Fact]
-    public void RandomNumeric_DigitsOnly_AndLengths()
+    public void RandomNumeric_DigitsOnly()
     {
         Assert.Matches("^[0-9]{12}$", RandomUtil.RandomNumeric(12));
         Assert.Equal(string.Empty, RandomUtil.RandomNumeric(0));

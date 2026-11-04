@@ -36,7 +36,7 @@ public static class XmlExtensions
         var jsonObject = ConvertToJson(xml);
         if (jsonObject != null && jsonObject.ContainsKey(rootFieldName) && jsonObject[rootFieldName] is JsonArray array)
         {
-            return JsonNode.Parse(array.ToJsonString())!.AsArray();
+            return JsonNode.Parse(array.ToJsonString())!.AsArray(); // justified: parsing text we just produced as valid JSON
         }
         return new JsonArray();
     }

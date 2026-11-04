@@ -6,7 +6,7 @@ using TabTabGo.Core.Exceptions;
 namespace TabTabGo.Core.Extensions;
 
 /// <summary>
-/// Decides which properties of an entity a client may change through JSON Patch or <see cref="JsonExtensions.Populate{T}"/>,
+/// Decides which properties of an entity a client may change through JSON Patch or <see cref="JsonExtensions.Populate{T}(JsonNode, T)"/>,
 /// and bounds how much a client can put into <see cref="IEntity.ExtraProperties"/>.
 /// Protected: the primary key (<c>Id</c>, <c>{Type}Id</c> or a <c>[Key]</c> property), the audit fields, <c>IsEnabled</c>
 /// (soft delete goes through <c>Delete</c>) and navigation properties (related entities are changed through their own
@@ -79,6 +79,28 @@ public static class EntityPropertyGuard
 
         var element = type.IsArray ? type.GetElementType() : type.IsGenericType ? type.GetGenericArguments()[0] : null;
         return element != null && typeof(IEntity).IsAssignableFrom(element);
+    }
+
+    /// <summary>
+    /// Finds the CLR property a client name binds to the way the serializers do: the exact name, the name ignoring case,
+    /// a <c>[JsonPropertyName]</c> (System.Text.Json) or a <c>[JsonProperty]</c> (Newtonsoft.Json) alias.
+    /// Protection checks must run on the name of this property, never on the client's spelling.
+    /// </summary>
+    /// <param name="type">The type that is bound</param>
+    /// <param name="clientName">Name as sent by the client</param>
+    /// <returns>The property, or null when the name does not bind to a property</returns>
+    public static PropertyInfo? ResolveProperty(Type type, string clientName)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        if (string.IsNullOrEmpty(clientName))
+        {
+            return null;
+        }
+
+        var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.GetIndexParameters().Length == 0).ToList();
+        return properties.FirstOrDefault(p => string.Equals(p.Name, clientName, StringComparison.OrdinalIgnoreCase))
+               ?? properties.FirstOrDefault(p => string.Equals(p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name, clientName, StringComparison.OrdinalIgnoreCase))
+               ?? properties.FirstOrDefault(p => string.Equals(p.GetCustomAttribute<Newtonsoft.Json.JsonPropertyAttribute>()?.PropertyName, clientName, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

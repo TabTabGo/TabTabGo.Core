@@ -73,7 +73,16 @@ public static class JsonExtensions
     /// <see cref="IEntity.ExtraProperties"/> when the target is an entity (bounded, see <see cref="EntityPropertyGuard"/>).
     /// On an entity the protected properties (key, audit fields, <c>IsEnabled</c>, related entities) are skipped.
     /// </summary>
-    public static void Populate<T>(this JsonNode value, T target) where T : class
+    public static void Populate<T>(this JsonNode value, T target) where T : class => value.Populate(target, null);
+
+    /// <summary>
+    /// Same as <see cref="Populate{T}(JsonNode, T)"/> with your own rule for protected properties. The predicate receives the
+    /// name of the CLR property the client name resolved to; it replaces the default rule (<see cref="EntityPropertyGuard"/>).
+    /// </summary>
+    /// <param name="value">The partial entity as JSON</param>
+    /// <param name="target">The object to change</param>
+    /// <param name="isProtected">True for properties that must not be set; null uses the default rule</param>
+    public static void Populate<T>(this JsonNode value, T target, Func<string, bool>? isProtected) where T : class
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(target);
@@ -82,18 +91,22 @@ public static class JsonExtensions
             throw new ArgumentException("Populate needs a JSON object.", nameof(value));
         }
 
-        PopulateObject(jsonObject, target, target.GetType());
+        PopulateObject(jsonObject, target, target.GetType(), isProtected);
     }
 
-    private static void PopulateObject(JsonObject source, object target, Type type)
+    private static void PopulateObject(JsonObject source, object target, Type type, Func<string, bool>? isProtected)
     {
         var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.CanRead && p.GetIndexParameters().Length == 0)
             .ToList();
         foreach (var (name, node) in source)
         {
-            var property = properties.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
-                           ?? properties.FirstOrDefault(p => string.Equals(p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name, name, StringComparison.OrdinalIgnoreCase));
+            var property = EntityPropertyGuard.ResolveProperty(type, name);
+            if (property != null && !properties.Contains(property))
+            {
+                property = null;
+            }
+
             if (property == null)
             {
                 if (target is IEntity entity)
@@ -111,8 +124,24 @@ public static class JsonExtensions
                 continue;
             }
 
+            if (target is IEntity owner && property.Name == nameof(IEntity.ExtraProperties))
+            {
+                // merged key by key so that the limits apply; never assigned as a whole
+                if (node is JsonObject bag)
+                {
+                    foreach (var (key, item) in bag)
+                    {
+                        var clr = item.ToClrValue();
+                        EntityPropertyGuard.EnsureExtraPropertyAllowed(owner.ExtraProperties, key, clr);
+                        owner.ExtraProperties[key] = clr;
+                    }
+                }
+
+                continue;
+            }
+
             // key, audit fields, IsEnabled and related entities are never set from a client payload
-            if (target is IEntity && EntityPropertyGuard.IsProtected(type, property.Name))
+            if (target is IEntity && (isProtected?.Invoke(property.Name) ?? EntityPropertyGuard.IsProtected(type, property.Name)))
             {
                 continue;
             }
@@ -120,7 +149,7 @@ public static class JsonExtensions
             var propertyType = property.PropertyType;
             if (node is JsonObject childObject && IsMergeable(propertyType) && property.GetValue(target) is { } existing)
             {
-                PopulateObject(childObject, existing, existing.GetType());
+                PopulateObject(childObject, existing, existing.GetType(), isProtected);
                 continue;
             }
 

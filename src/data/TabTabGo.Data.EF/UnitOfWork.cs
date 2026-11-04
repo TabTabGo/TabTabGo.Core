@@ -60,7 +60,7 @@ public abstract class UnitOfWork : IUnitOfWork
     public virtual void SetEntityStateModified<TEntity, TProperty>(TEntity entity,
         Expression<Func<TEntity, TProperty>> propertyExpression) where TEntity : class where TProperty : class
     {
-        _context.Entry(entity).Reference(propertyExpression!).IsModified = true;
+        _context.Entry(entity).Reference(propertyExpression!).IsModified = true; // justified: the expression is non-null; the lambda type only differs by nullable annotation
     }
 
     /// <inheritdoc />
@@ -264,7 +264,7 @@ public abstract class UnitOfWork : IUnitOfWork
         // 4. Construct new query
         var resultExpression = Expression.Call(
             null,
-            GetMethodInfo(Queryable.Where!, source, (Expression<Func<T, bool>>?)null),
+            GetMethodInfo(Queryable.Where!, source, (Expression<Func<T, bool>>?)null), // justified: a method group of a generic method; the nullable annotation does not apply
             new[] { source.Expression, Expression.Quote(expression) });
         return source.Provider.CreateQuery<T>(resultExpression);
     }

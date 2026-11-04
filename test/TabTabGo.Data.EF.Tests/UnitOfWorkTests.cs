@@ -105,7 +105,7 @@ public class UnitOfWorkTests : IDisposable
     }
 
     [Fact]
-    public void GetChanges_ReturnsSnapshotsNotLiveValues()
+    public void GetChanges_SnapshotNotLive()
     {
         var product = _context.Products.First(p => p.Id == 1);
         product.Name = "first";

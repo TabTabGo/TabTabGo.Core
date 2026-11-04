@@ -131,7 +131,7 @@ public class JsonNodeComparer : IEqualityComparer<JsonNode?>, IDisposable
                     return element.ValueKind switch
                     {
                         JsonValueKind.Number => element.GetDouble().GetHashCode(),
-                        JsonValueKind.String => element.GetString()!.GetHashCode(),
+                        JsonValueKind.String => element.GetString()!.GetHashCode(), // justified: the node was checked to be a JSON string
                         var kind => kind.GetHashCode(),
                     };
             }
