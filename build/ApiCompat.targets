@@ -1,0 +1,32 @@
+<Project>
+
+  <!--
+    API compatibility gate. Package validation cannot compare the net8.0 baseline with a net10.0-only package (PKV006),
+    so the baseline net8.0 assembly is compared with the freshly built net10.0 assembly using the ApiCompat tool from
+    .config/dotnet-tools.json. Any break that is not listed in build/api-compat-suppressions.xml fails the Release build.
+    Reference assemblies come from the .NET reference packs, downloaded by NuGet. Opt out with -p:ApiCompatGate=false.
+  -->
+  <PropertyGroup>
+    <ApiCompatGate Condition="'$(ApiCompatGate)' == ''">true</ApiCompatGate>
+    <ApiCompatSuppressionFile>$(MSBuildThisFileDirectory)api-compat-suppressions.xml</ApiCompatSuppressionFile>
+    <_ApiCompatActive Condition="'$(ApiCompatGate)' == 'true' and '$(Configuration)' == 'Release' and '$(IsPackable)' != 'false' and '$(EnablePackageValidation)' == 'true' and '$(PackageValidationBaselineVersion)' != ''">true</_ApiCompatActive>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(_ApiCompatActive)' == 'true'">
+    <PackageDownload Include="Microsoft.NETCore.App.Ref" Version="[8.0.22]" />
+    <PackageDownload Include="Microsoft.AspNetCore.App.Ref" Version="[8.0.22]" />
+  </ItemGroup>
+
+  <Target Name="ApiCompatGate" AfterTargets="Build" Condition="'$(_ApiCompatActive)' == 'true'">
+    <PropertyGroup>
+      <ApiCompatBaselineAssembly>$(NuGetPackageRoot)$([System.String]::Copy('$(PackageId)').ToLowerInvariant())/$(PackageValidationBaselineVersion)/lib/net8.0/$(AssemblyName).dll</ApiCompatBaselineAssembly>
+      <_LeftRefs>$(NuGetPackageRoot)microsoft.netcore.app.ref/8.0.22/ref/net8.0,$(NuGetPackageRoot)microsoft.aspnetcore.app.ref/8.0.22/ref/net8.0</_LeftRefs>
+      <_RightRefs>@(ReferencePathWithRefAssemblies->'%(RootDir)%(Directory)', ',')</_RightRefs>
+      <_ApiCompatCommand>dotnet tool run apicompat -- -l "$(ApiCompatBaselineAssembly)" -r "$(TargetPath)" --lref "$(_LeftRefs)" --rref "$(_RightRefs)" --suppression-file "$(ApiCompatSuppressionFile)" --permit-unnecessary-suppressions</_ApiCompatCommand>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(ApiCompatBaselineAssembly)')" Text="ApiCompat baseline $(ApiCompatBaselineAssembly) is missing; restore the project first." />
+    <Exec Command="dotnet tool restore" WorkingDirectory="$(MSBuildThisFileDirectory).." StandardOutputImportance="low" />
+    <Exec Command="$(_ApiCompatCommand)" WorkingDirectory="$(MSBuildThisFileDirectory).." />
+  </Target>
+
+</Project>
