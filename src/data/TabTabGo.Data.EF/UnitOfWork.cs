@@ -22,6 +22,14 @@ public abstract class UnitOfWork : IUnitOfWork
     /// <summary>Repositories created so far by "entity:key" name.</summary>
     protected readonly ConcurrentDictionary<string, object> _repositories = new();
 
+    /// <summary>Creates a unit of work over a context the DI container owns (kept from 8.x).</summary>
+    /// <param name="context">The context; must not be null</param>
+    /// <param name="logger">Logger</param>
+    public UnitOfWork(DbContext context, ILogger<UnitOfWork> logger)
+        : this(context, logger, false)
+    {
+    }
+
     /// <summary>Creates a unit of work.</summary>
     /// <param name="context">The context; must not be null</param>
     /// <param name="logger">Logger</param>
@@ -29,7 +37,7 @@ public abstract class UnitOfWork : IUnitOfWork
     /// When true <see cref="Dispose"/> closes the connection and disposes the context. Leave false when the DI container
     /// owns the context (the usual case); pass true outside DI.
     /// </param>
-    protected UnitOfWork(DbContext context, ILogger<UnitOfWork> logger, bool ownsContext = false)
+    protected UnitOfWork(DbContext context, ILogger<UnitOfWork> logger, bool ownsContext)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(logger);

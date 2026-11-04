@@ -61,7 +61,7 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
     /// <summary>Creates the service.</summary>
     /// <param name="repository">Repository</param>
     /// <param name="logger">Logger</param>
-    protected BaseReadService(IGenericReadRepository<TEntity, TKey> repository,
+    public BaseReadService(IGenericReadRepository<TEntity, TKey> repository,
         ILogger<BaseReadService<TEntity, TKey>> logger)
     {
         ArgumentNullException.ThrowIfNull(repository);

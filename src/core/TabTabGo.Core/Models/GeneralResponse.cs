@@ -11,7 +11,7 @@ public class GeneralResponse
     /// <param name="message">Response message</param>
     /// <param name="code">Optional system code</param>
     /// <param name="data">Optional payload, serialized as <c>data</c></param>
-    public GeneralResponse(string message, string? code, object? data = null)
+    public GeneralResponse(string message, string? code, dynamic? data = null)
     {
         Message = message;
         Code = code;
@@ -29,7 +29,7 @@ public class GeneralResponse
 
     /// <summary>Payload.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public object? Data { get; set; }
+    public dynamic? Data { get; set; }
 
     /// <summary>Extra properties flattened into the response object.</summary>
     [JsonExtensionData]

@@ -34,7 +34,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="unitOfWork">Unit of work</param>
     /// <param name="repository">Repository</param>
     /// <param name="logger">Logger</param>
-    protected BaseService(IUnitOfWork unitOfWork, IGenericRepository<TEntity, TKey> repository,
+    public BaseService(IUnitOfWork unitOfWork, IGenericRepository<TEntity, TKey> repository,
         ILogger<BaseService<TEntity, TKey>> logger) : base(repository, logger)
     {
         ArgumentNullException.ThrowIfNull(unitOfWork);
@@ -44,7 +44,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <summary>Creates the service; the repository comes from the unit of work.</summary>
     /// <param name="unitOfWork">Unit of work</param>
     /// <param name="logger">Logger</param>
-    protected BaseService(IUnitOfWork unitOfWork,
+    public BaseService(IUnitOfWork unitOfWork,
         ILogger<BaseService<TEntity, TKey>> logger) : base(RepositoryOf(unitOfWork), logger)
     {
         _unitOfWork = unitOfWork;

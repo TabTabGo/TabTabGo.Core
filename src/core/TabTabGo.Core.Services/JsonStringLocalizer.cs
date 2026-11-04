@@ -38,6 +38,13 @@ public partial class JsonStringLocalizer : IStringLocalizer, ICultureStringLocal
     {
     }
 
+    /// <summary>Creates a localizer with the default resource locations (kept from 8.x; the cache is no longer used).</summary>
+    /// <param name="distributedCache">Ignored</param>
+    public JsonStringLocalizer(IDistributedCache distributedCache)
+        : this(new JsonStringLocalizerOptions())
+    {
+    }
+
     /// <summary>Creates a localizer with explicit options.</summary>
     /// <param name="options">Resource locations</param>
     public JsonStringLocalizer(JsonStringLocalizerOptions options)
