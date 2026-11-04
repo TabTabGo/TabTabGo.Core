@@ -183,8 +183,18 @@ public abstract class UnitOfWork : IUnitOfWork
 
         // a user-initiated transaction is only allowed inside the execution strategy, otherwise a retrying strategy throws
         var strategy = _context.Database.CreateExecutionStrategy();
+        var attempt = 0;
         return await strategy.ExecuteAsync(async ct =>
         {
+            if (attempt++ > 0)
+            {
+                // A retry starts from the database, not from what the failed attempt left in the tracker: its saved changes
+                // were accepted (tracked as unchanged) although the transaction rolled back, so a scope or state check
+                // could otherwise run against values that were never committed. The operation reloads what it needs; the
+                // object that carries the caller's change is re-attached by the operation, so the change is applied once.
+                _context.ChangeTracker.Clear();
+            }
+
             await using var transaction = await _context.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
             var result = await operation(ct).ConfigureAwait(false);
             await _context.SaveChangesAsync(ct).ConfigureAwait(false);

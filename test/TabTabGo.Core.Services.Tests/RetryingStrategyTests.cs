@@ -64,4 +64,67 @@ public class RetryingStrategyTests() : ServiceTestBase(seed: true, retrying: tru
 
         Assert.Equal("committed first", seenByPostUpdate);
     }
+
+    private (FailOnceAfterWrite Failure, Services.BaseService<Product, int> Service, TestProductService Typed) ServiceWithFailureBeforeCommit()
+    {
+        var failure = new FailOnceAfterWrite();
+        Db.DefaultInterceptors.Add(failure);
+        var context = Db.CreateContext();
+        var typed = new TestProductService(new TestUnitOfWork(context),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Services.BaseService<Product, int>>.Instance);
+        return (failure, typed, typed);
+    }
+
+    [Fact]
+    public async Task UpdateChanges_Scoped_TransientFailureBeforeTheCommit_AppliesTheChangeOnceAndFiresPostUpdateAfterIt()
+    {
+        var (failure, service, typed) = ServiceWithFailureBeforeCommit();
+        var product = (await service.GetByKey(6, cancellationToken: Ct))!;
+        product.Name = "after retry";
+        product.Price = 999;
+        var postUpdateSaw = new List<string>();
+        typed.PostUpdateHook = _ =>
+        {
+            using var other = Db.CreateContext();
+            postUpdateSaw.Add(other.Products.Find(6)!.Name);
+        };
+
+        await service.UpdateChanges(6, product, HardwareScope, Ct);
+
+        Assert.Equal(1, failure.Failures);
+        await using var fresh = Db.CreateContext();
+        var stored = fresh.Products.Find(6)!;
+        Assert.Equal("after retry", stored.Name);
+        Assert.Equal(999, stored.Price);
+        Assert.Equal(new[] { "after retry" }, postUpdateSaw); // once, and only once the commit made the row visible
+        Assert.Equal(1, typed.Calls.Count(c => c == "PostUpdate"));
+    }
+
+    [Fact]
+    public async Task UpdateChanges_Scoped_ViolatingChangeIsStillRejectedOnTheRetryAttempt()
+    {
+        int otherCategory;
+        await using (var context = Db.CreateContext())
+        {
+            var other = new Category { Name = "Other" };
+            context.Categories.Add(other);
+            await context.SaveChangesAsync(Ct);
+            otherCategory = other.Id;
+        }
+
+        var (failure, service, typed) = ServiceWithFailureBeforeCommit();
+        var product = (await service.GetByKey(8, cancellationToken: Ct))!;
+        product.CategoryId = otherCategory;
+        product.Name = "escaped";
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.UpdateChanges(8, product, HardwareScope, Ct));
+
+        Assert.Equal(1, failure.Failures);
+        Assert.Equal(HttpStatusCode.NotFound, ex.HttpStatusCode);
+        await using var fresh = Db.CreateContext();
+        var stored = fresh.Products.Find(8)!;
+        Assert.Equal("Product 08", stored.Name);
+        Assert.NotEqual(otherCategory, stored.CategoryId);
+        Assert.DoesNotContain("PostUpdate", typed.Calls);
+    }
 }

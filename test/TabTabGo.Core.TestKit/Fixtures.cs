@@ -28,6 +28,9 @@ public sealed class SqliteFixture : IDisposable
 
     public SqliteConnection Connection => _connection;
 
+    /// <summary>Interceptors added to every context this fixture creates (set before the first use).</summary>
+    public List<Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor> DefaultInterceptors { get; } = new();
+
     public TestDbContext CreateContext(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
     {
         var builder = new DbContextOptionsBuilder<TestDbContext>()
@@ -38,9 +41,10 @@ public sealed class SqliteFixture : IDisposable
                     o.ExecutionStrategy(d => new RetryingStrategy(d));
                 }
             });
-        if (interceptors.Length > 0)
+        var all = DefaultInterceptors.Concat(interceptors).ToArray();
+        if (all.Length > 0)
         {
-            builder.AddInterceptors(interceptors);
+            builder.AddInterceptors(all);
         }
 
         return new TestDbContext(builder.Options);

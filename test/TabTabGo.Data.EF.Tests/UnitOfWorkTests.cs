@@ -301,7 +301,11 @@ public class UnitOfWorkTests : IDisposable
         await uow.ExecuteInTransactionAsync(async ct =>
         {
             attempts++;
-            context.ChangeTracker.Clear(); // a repeatable operation starts from a clean tracker, as EF documents for retries
+            if (attempts == 2)
+            {
+                Assert.Empty(context.ChangeTracker.Entries()); // the failed attempt's tracked state is discarded before the retry
+            }
+
             context.Products.Add(new Product { Name = "retried", Tenant = "A" });
             await uow.SaveChangesAsync(ct);
             if (attempts == 1)

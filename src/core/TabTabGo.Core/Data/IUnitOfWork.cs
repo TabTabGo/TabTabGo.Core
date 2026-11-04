@@ -128,7 +128,10 @@ public interface IUnitOfWork : IDisposable
     /// The default implementation uses <see cref="BeginTransactionAsync"/>, <see cref="CommitAsync"/> and <see cref="RollbackAsync"/>.
     /// </summary>
     /// <typeparam name="T">Result type</typeparam>
-    /// <param name="operation">The work; it may run more than once under a retrying strategy, so it must be repeatable</param>
+    /// <param name="operation">
+    /// The work; it may run more than once under a retrying strategy, so it must be repeatable: it loads what it needs and
+    /// does not rely on tracker state left by an earlier attempt (the EF implementation clears the tracker before each retry).
+    /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
     async Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken = default)
     {

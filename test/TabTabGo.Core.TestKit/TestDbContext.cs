@@ -89,6 +89,49 @@ public class CommandCapture : Microsoft.EntityFrameworkCore.Diagnostics.DbComman
     }
 }
 
+/// <summary>
+/// Throws <see cref="TransientTestException"/> once, on the first read that follows a write: after SaveChanges and before the commit.
+/// </summary>
+public sealed class FailOnceAfterWrite : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+{
+    private bool _wrote;
+
+    /// <summary>How many times the failure was raised.</summary>
+    public int Failures { get; private set; }
+
+    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> NonQueryExecutingAsync(
+        System.Data.Common.DbCommand command, Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+        Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, CancellationToken cancellationToken = default)
+    {
+        Mark(command);
+        return ValueTask.FromResult(result);
+    }
+
+    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(
+        System.Data.Common.DbCommand command, Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+        Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> result, CancellationToken cancellationToken = default)
+    {
+        Mark(command);
+        if (_wrote && Failures == 0 && command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+        {
+            Failures++;
+            throw new TransientTestException();
+        }
+
+        return ValueTask.FromResult(result);
+    }
+
+    // SQLite runs UPDATE ... RETURNING through the reader
+    private void Mark(System.Data.Common.DbCommand command)
+    {
+        var text = command.CommandText.TrimStart();
+        if (text.StartsWith("UPDATE", StringComparison.OrdinalIgnoreCase) || text.StartsWith("INSERT", StringComparison.OrdinalIgnoreCase))
+        {
+            _wrote = true;
+        }
+    }
+}
+
 /// <summary>The transient failure <see cref="RetryingStrategy"/> retries on.</summary>
 public sealed class TransientTestException() : Exception("transient");
 
