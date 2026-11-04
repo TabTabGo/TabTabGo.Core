@@ -220,6 +220,19 @@ public class ODataFilterTokenizerTests
     }
 
     [Fact]
+    public void Split_BalancedGroupsFarPastTheStack_Rejects400OnSmallStack()
+    {
+        // within the filter length cap, but far deeper than a 256 KB stack could recurse
+        var filter = new string('(', 2_000) + "A eq 1" + new string(')', 2_000);
+
+        RunOnSmallStack(() =>
+        {
+            var ex = Assert.Throws<ApiException>(() => Split(filter));
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, ex.HttpStatusCode);
+        });
+    }
+
+    [Fact]
     public void Split_ManyNotsAndParensUnclosed_Rejects400OnSmallStack()
     {
         var filter = string.Concat(Enumerable.Repeat("not (", 10_000));

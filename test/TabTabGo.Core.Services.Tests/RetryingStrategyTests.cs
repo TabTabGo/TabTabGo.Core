@@ -52,17 +52,13 @@ public class RetryingStrategyTests() : ServiceTestBase(seed: true, retrying: tru
     {
         var product = (await Service.GetByKey(4, cancellationToken: Ct))!;
         product.Name = "committed first";
-        string? seenByPostUpdate = null;
-        Service.PostUpdateHook = _ =>
-        {
-            // a second context only sees committed data
-            using var other = Db.CreateContext();
-            seenByPostUpdate = other.Products.Find(4)!.Name;
-        };
+        var transactionOpenInPostUpdate = new List<bool>();
+        Service.PostUpdateHook = _ => transactionOpenInPostUpdate.Add(UnitOfWork.HasActiveTransaction);
 
         await Service.UpdateChanges(4, product, HardwareScope, Ct);
 
-        Assert.Equal("committed first", seenByPostUpdate);
+        // once, and after the commit (a second context on the shared SQLite connection would see uncommitted rows)
+        Assert.Equal(new[] { false }, transactionOpenInPostUpdate);
     }
 
     private (FailOnceAfterWrite Failure, Services.BaseService<Product, int> Service, TestProductService Typed) ServiceWithFailureBeforeCommit()

@@ -650,6 +650,25 @@ public class ExtensionsTests
         Assert.Equal(expected, EntityPropertyGuard.IsProtected(typeof(Hidden), name));
     }
 
+    private sealed class PlainWithNewtonsoftIgnore
+    {
+        public string Visible { get; set; } = "v";
+
+        [Newtonsoft.Json.JsonIgnore]
+        public string Hidden { get; set; } = "h";
+    }
+
+    [Fact]
+    public void Populate_NewtonsoftJsonIgnoreOnANonEntity_IsHonoured()
+    {
+        var target = new PlainWithNewtonsoftIgnore();
+
+        JsonNode.Parse("{\"visible\":\"changed\",\"hidden\":\"x\"}")!.Populate(target);
+
+        Assert.Equal("changed", target.Visible);
+        Assert.Equal("h", target.Hidden);
+    }
+
     [Fact]
     public void Populate_NewtonsoftJsonIgnore_IsHonoured()
     {
