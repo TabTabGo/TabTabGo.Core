@@ -7,8 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Data\countries_info.json" CopyToOutputDirectory="Always" />
-    <EmbeddedResource Include="Resources\ar-AE.json" CopyToOutputDirectory="Always" />
+    <EmbeddedResource Include="Data\countries_info.json" />
+    <EmbeddedResource Include="Resources\ar-AE.json" />
   </ItemGroup>
 
   <ItemGroup>
