@@ -6,6 +6,15 @@
     <IsTestProject>false</IsTestProject>
   </PropertyGroup>
 
+  <!-- a library of fakes, not a test assembly: drop the test packages the folder props add -->
+  <ItemGroup>
+    <PackageReference Remove="xunit.v3" />
+    <PackageReference Remove="xunit.runner.visualstudio" />
+    <PackageReference Remove="Microsoft.NET.Test.Sdk" />
+    <PackageReference Remove="coverlet.MTP" />
+    <Using Remove="Xunit" />
+  </ItemGroup>
+
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
