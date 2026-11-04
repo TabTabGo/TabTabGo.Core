@@ -61,7 +61,7 @@ public class MiddlewareTests
     }
 
     [Fact]
-    public async Task ErrorHandling_ObsoleteTtgException_Mapped()
+    public async Task Invoke_ObsoleteTtgException_Mapped()
     {
 #pragma warning disable CS0618
         var (client, _, app) = await ErrorApp(_ => throw new TTGException("old", null, Microsoft.Extensions.Logging.LogLevel.Error, 7, HttpStatusCode.NotFound, "OLD"));

@@ -286,7 +286,7 @@ public static class SetupEntityRouters
         {
             logger.LogTrace("REST request to patch {EntityName}", entityName);
 
-            if (id == null || EqualityComparer<TKey>.Default.Equals(id, default!))
+            if (id == null || EqualityComparer<TKey>.Default.Equals(id, default!)) // justified: a key of a generic type; default is the unset value the comparison wants
             {
                 return TypedResults.BadRequest(ApiErrorResponses.Failure("Invalid Id", "Invalid_Id".ToUpperInvariant(), http));
             }
@@ -332,7 +332,8 @@ public static class SetupEntityRouters
                     return TypedResults.BadRequest(ApiErrorResponses.Validation("Invalid patch request", "Invalid_Patch_Request".ToUpperInvariant(), validationResult, http));
                 }
 
-                var updated = await service.UpdateChanges(id, entity, cancellationToken);
+                // saved inside a transaction that the database scope check can veto (foreign keys and navigations count there)
+                var updated = await service.UpdateChanges(id, entity, options.GetFixCriteria, cancellationToken);
                 var entityViewModel = mapper?.MapToViewModel(updated);
                 return TypedResults.Ok<object>(entityViewModel != null ? entityViewModel : updated);
             }

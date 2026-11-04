@@ -152,15 +152,136 @@ public class EntityControllerBaseTests
     }
 
     [Fact]
-    public void Constructor_NoMapperAndRequestIsNotAnEntity_FailsWithClearMessage()
+    public async Task NoMapper_ConstructorDoesNotThrow_EveryActionButCreateWorks()
     {
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            new EntityControllerBase<Product, int, ProductViewModel, ProductCreateRequest, ProductUpdateRequest>(
-                NullLogger.Instance, new TestProductService(new MinimalUnitOfWorkStub(), NullLogger<BaseService<Product, int>>.Instance), null, null));
+        // the constructor used to throw, which failed every action of the controller
+        await using var app = await Start(withMapper: false);
 
-        Assert.Contains("mapper", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Throws<ArgumentNullException>(() =>
-            new EntityControllerBase<Product, int, Product, Product, Product>(null!, null!, null, null));
+        Assert.Equal(HttpStatusCode.OK, (await app.Client.SendAsync(app.Request(HttpMethod.Get, "/api/products?$top=1"), Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await app.Client.SendAsync(app.Request(HttpMethod.Get, "/api/products/2"), Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/3", Patch("[{\"op\":\"replace\",\"path\":\"/name\",\"value\":\"x\"}]")), Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await app.Client.SendAsync(app.Request(HttpMethod.Delete, "/api/products/4"), Ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task NoMapper_Create_Is500WithAClearMessage()
+    {
+        await using var app = await Start(withMapper: false);
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Post, "/api/products", Json("{\"name\":\"x\"}")), Ct);
+        var body = await Body(response);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("MAPPER_REQUIRED", body.GetProperty("code").GetString());
+        Assert.Contains("IMapper", body.GetProperty("message").GetString());
+        await using var fresh = app.Db.CreateContext();
+        Assert.Equal(25, fresh.Products.Count());
+    }
+
+    [Fact]
+    public void Constructor_NullArguments_Throw()
+    {
+        Assert.Throws<ArgumentNullException>(() => new EntityControllerBase<Product, int, Product, Product, Product>(null!, null!, null, null));
+    }
+
+    [Fact]
+    public void FixCriteria_DefaultsAreNull()
+    {
+        using var db = new SqliteFixture();
+        var service = new TestProductService(new TestUnitOfWork(db.CreateContext()), NullLogger<BaseService<Product, int>>.Instance);
+
+        var controller = new Unscoped(service);
+
+        Assert.Null(controller.Search);
+        Assert.Null(controller.Get);
+        Assert.Null(controller.Export);
+    }
+
+    private sealed class Unscoped(TestProductService service)
+        : EntityControllerBase<Product, int, ProductViewModel, ProductCreateRequest, ProductUpdateRequest>(NullLogger.Instance, service, new FakeProductMapper(), null)
+    {
+        public object? Search => SearchFixCriteria;
+
+        public object? Get => GetFixCriteria;
+
+        public object? Export => ExportFixCriteria;
+    }
+
+    // --- bulk delete (R4) ---
+
+    [Fact]
+    public async Task DeleteMany_MoreThanTheLimit_Is400()
+    {
+        await using var app = await Start();
+        var ids = string.Join(",", Enumerable.Range(1, 501));
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Post, "/api/products/delete", Json("[" + ids + "]")), Ct);
+        var scoped = await app.Client.SendAsync(app.Request(HttpMethod.Post, "/api/products/delete", Json("[" + ids + "]"), tenant: "A"), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("TOO_MANY_IDS", (await Body(response)).GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, scoped.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        Assert.Equal(25, fresh.Products.Count(p => p.IsEnabled));
+    }
+
+    // --- scope is checked in the database after the patch (S3) ---
+
+    [Fact]
+    public async Task Patch_ForeignKeyMovesTheEntityOutOfScope_Is404AndNothingPersisted()
+    {
+        await using var app = await TestApp.StartAsync(options: o => o.GetFixCriteria = p => p.Category!.Name == "Hardware");
+        int other;
+        await using (var context = app.Db.CreateContext())
+        {
+            var category = new Category { Name = "Other" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync(Ct);
+            other = category.Id;
+        }
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"/categoryId\",\"value\":" + other + "},{\"op\":\"replace\",\"path\":\"/name\",\"value\":\"moved\"}]")), Ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        var stored = fresh.Products.Find(2)!;
+        Assert.NotEqual(other, stored.CategoryId);
+        Assert.Equal("Product 02", stored.Name);
+    }
+
+    [Fact]
+    public async Task Patch_ForeignKeyChangeInsideTheScope_Works()
+    {
+        await using var app = await TestApp.StartAsync(options: o => o.GetFixCriteria = p => p.Category!.Name == "Hardware");
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"/name\",\"value\":\"fine\"}]")), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Controller_PatchForeignKeyOutOfScope_Is404AndNothingPersisted()
+    {
+        await using var app = await Start();
+        int other;
+        await using (var context = app.Db.CreateContext())
+        {
+            var category = new Category { Name = "Other" };
+            context.Categories.Add(category);
+            await context.SaveChangesAsync(Ct);
+            other = category.Id;
+        }
+
+        // the controller scopes by tenant: moving a tenant-A product to tenant B through the numeric column is caught by the database check
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"/tenant\",\"value\":\"B\"}]"), tenant: "A"), Ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        Assert.Equal("A", fresh.Products.Find(2)!.Tenant);
+        Assert.True(other > 0);
     }
 
     // --- patch ---------------------------------------------------------------------------------------------------

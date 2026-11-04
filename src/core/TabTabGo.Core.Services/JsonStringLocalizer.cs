@@ -147,7 +147,7 @@ public partial class JsonStringLocalizer : IStringLocalizer, ICultureStringLocal
         var candidates = new List<string>();
         if (IsValidCultureName(culture))
         {
-            var current = culture!;
+            var current = culture!; // justified: IsValidCultureName returned true, so the text is not null
             while (current.Length > 0)
             {
                 candidates.Add(current);
@@ -230,7 +230,7 @@ public partial class JsonStringLocalizer : IStringLocalizer, ICultureStringLocal
         return Cache.GetOrAdd(cacheKey, _ => new Lazy<FrozenDictionary<string, string>?>(() => Parse(actual))).Value;
     }
 
-    private FrozenDictionary<string, string>? Parse(string culture)
+    internal FrozenDictionary<string, string>? Parse(string culture)
     {
         var values = new Dictionary<string, string>();
         var found = false;
@@ -241,7 +241,7 @@ public partial class JsonStringLocalizer : IStringLocalizer, ICultureStringLocal
                 .FirstOrDefault(r => string.Equals(r, $"{EmbeddedPrefix()}{culture}.json", StringComparison.OrdinalIgnoreCase));
             if (resourceName != null)
             {
-                using var stream = _assembly.GetManifestResourceStream(resourceName)!;
+                using var stream = _assembly.GetManifestResourceStream(resourceName)!; // justified: the resource name was listed from this assembly a moment ago
                 using var document = JsonDocument.Parse(stream);
                 Flatten(string.Empty, document.RootElement, values);
                 found = true;
@@ -268,7 +268,7 @@ public partial class JsonStringLocalizer : IStringLocalizer, ICultureStringLocal
     }
 
     /// <summary>The resource file path, or null when it would fall outside the resources folder.</summary>
-    private string? SafeFilePath(string culture)
+    internal string? SafeFilePath(string culture)
     {
         var root = Path.GetFullPath(_options.ResourcesPath);
         var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;

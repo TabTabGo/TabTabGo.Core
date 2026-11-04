@@ -4,8 +4,10 @@
     <Title>TabTabGo Core Api</Title>
     <Description>Reusable ASP.NET Core helpers: entity route generation (minimal API), legacy controller base, error handling and request logging middlewares.</Description>
     <PackageTags>aspnetcore;api;minimal-api;middleware</PackageTags>
-    <!-- The ASP.NET route-handler analyzer in SDK 10.0.401 throws a NullReferenceException on generic handlers with Results<...> return types (analyzer defect, not a code issue). -->
-    <NoWarn>$(NoWarn);AD0001</NoWarn>
+    <!-- TODO: remove on the next SDK bump. The ASP.NET route-handler analyzer of SDK 10.0.401 throws a NullReferenceException
+         (AD0001) on generic handlers with Results<...> return types; it is an analyzer defect, not a code issue.
+         Scoped to exactly the pinned SDK so a newer SDK reports it again. -->
+    <NoWarn Condition="'$(NETCoreSdkVersion)' == '10.0.401'">$(NoWarn);AD0001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

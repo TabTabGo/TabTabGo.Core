@@ -304,7 +304,7 @@ public class BaseServiceTests : ServiceTestBase
     // --- JSON patch operator -------------------------------------------------------------------------------------
 
     [Fact]
-    public void HandleJsonOperator_AddExistingKey_Replaces()
+    public void HandleJsonOperator_AddExisting_Replaces()
     {
         var product = new Product();
         product.ExtraProperties["color"] = "red";

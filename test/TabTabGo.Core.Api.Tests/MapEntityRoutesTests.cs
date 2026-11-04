@@ -37,7 +37,7 @@ public class MapEntityRoutesTests
     }
 
     [Fact]
-    public async Task MapEntityRoutes_TwoRequests_GetDistinctScopes()
+    public async Task MapEntityRoutes_TwoRequests_DistinctScopes()
     {
         var contexts = new List<object>();
         await using var app = await TestApp.StartAsync(services: s => s.AddScoped<ContextRecorder>(sp =>
@@ -176,7 +176,7 @@ public class MapEntityRoutesTests
     }
 
     [Fact]
-    public async Task Search_Binds_ODataOptions()
+    public async Task MapEntityRoutes_Search_BindsODataOptions()
     {
         await using var app = await TestApp.StartAsync();
 
@@ -199,7 +199,7 @@ public class MapEntityRoutesTests
     }
 
     [Fact]
-    public async Task Get_Missing_Is404WithEntityNameInBody()
+    public async Task NotFound_MessageNamesEntity()
     {
         await using var app = await TestApp.StartAsync();
 
@@ -308,7 +308,7 @@ public class MapEntityRoutesTests
     }
 
     [Fact]
-    public async Task Patch_InvalidChange_400AndNothingSaved()
+    public async Task Patch_InvalidChange_400()
     {
         await using var app = await TestApp.StartAsync();
 
@@ -450,7 +450,7 @@ public class MapEntityRoutesTests
     }
 
     [Fact]
-    public async Task Export_Overridden_StreamsFileWithEntityNameAndExtension()
+    public async Task Export_DefaultFileNameUsesEntity()
     {
         await using var app = await TestApp.StartAsync(services: s => s.AddScoped<IBaseService<Product, int>>(sp =>
             new ExportingService(sp.GetRequiredService<TabTabGo.Core.Data.IUnitOfWork>())));

@@ -52,8 +52,69 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
     /// </summary>
     protected virtual string[]? IgnoredProperties { get; } = new string[] { };
 
+    /// <summary>Most keys a bulk request may name.</summary>
+    public const int MaxBulkKeys = 500;
+
     /// <inheritdoc />
     public abstract Expression<Func<TEntity, bool>> GetKeyPredicate(TKey id);
+
+    /// <summary>
+    /// The predicate that finds one entity: <see cref="GetKeyPredicate"/>, or one built from the store's key metadata when
+    /// that returns null. A scope can only be applied through a predicate, so when neither exists this throws.
+    /// </summary>
+    /// <param name="id">Entity key</param>
+    /// <exception cref="InvalidOperationException">No predicate can be built</exception>
+    protected Expression<Func<TEntity, bool>> ResolveKeyPredicate(TKey id) =>
+        GetKeyPredicate(id)
+        ?? CurrentRepository.GetKeysPredicate(new[] { id })
+        ?? throw new InvalidOperationException(
+            $"{GetType().Name}.GetKeyPredicate returned null and the repository cannot build a key predicate, so a lookup cannot be scoped.");
+
+    /// <summary>One predicate for several keys: the store's <c>IN</c> list when it can build one, otherwise an OR of the key predicates.</summary>
+    /// <param name="keys">The keys (at most <see cref="MaxBulkKeys"/>)</param>
+    /// <exception cref="ApiException">Too many keys (400)</exception>
+    protected Expression<Func<TEntity, bool>> KeysPredicate(IReadOnlyCollection<TKey> keys)
+    {
+        if (keys.Count > MaxBulkKeys)
+        {
+            throw new ApiException($"At most {MaxBulkKeys} keys can be sent in one request.", errorNumber: 3003,
+                statusCode: System.Net.HttpStatusCode.BadRequest, code: "TOO_MANY_IDS");
+        }
+
+        var contains = CurrentRepository.GetKeysPredicate(keys);
+        if (contains != null)
+        {
+            return contains;
+        }
+
+        var predicate = PredicateBuilder.New<TEntity>(false);
+        foreach (var key in keys)
+        {
+            predicate = predicate.Or(ResolveKeyPredicate(key));
+        }
+
+        return predicate;
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<int> CountByKeys(IEnumerable<TKey> ids, Expression<Func<TEntity, bool>>? fixCriteria = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        var keys = ids.Distinct().ToList();
+        if (keys.Count == 0)
+        {
+            return 0;
+        }
+
+        var predicate = PredicateBuilder.New(KeysPredicate(keys));
+        if (fixCriteria != null)
+        {
+            predicate = predicate.And(fixCriteria);
+        }
+
+        return await CurrentRepository.CountAsync(predicate, cancellationToken: cancellationToken);
+    }
 
     /// <inheritdoc />
     public abstract TKey GetKey(TEntity entity);
@@ -78,23 +139,15 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
     protected virtual async Task LoadEntityAsync(TKey id,
         CancellationToken cancellationToken = default, string[]? includeProperties = null)
     {
-        var predicate = GetKeyPredicate(id);
+        var predicate = ResolveKeyPredicate(id);
         var propertiesToInclude = new List<string>(IncludeProperties);
         if (includeProperties != null)
         {
             propertiesToInclude.AddRange(includeProperties);
         }
 
-        if (predicate == null)
-        {
-            CurrentEntity =
-                await CurrentRepository.GetByKeyAsync(id, propertiesToInclude.Distinct().ToArray(), cancellationToken);
-        }
-        else
-        {
-            CurrentEntity = await CurrentRepository.FirstOrDefaultAsync(filter: predicate,
-                includeProperties: propertiesToInclude.Distinct().ToArray(), cancellationToken: cancellationToken);
-        }
+        CurrentEntity = await CurrentRepository.FirstOrDefaultAsync(filter: predicate,
+            includeProperties: propertiesToInclude.Distinct().ToArray(), cancellationToken: cancellationToken);
 
         PopulateAdditionalProperties(CurrentEntity);
     }
@@ -178,10 +231,11 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
     }
 
     /// <summary>
-    /// Get Return Entity if it is updated other wise return null
+    /// Gets an entity by key. With <paramref name="lastUpdatedDate"/> the entity is returned only when it has <b>not</b> been
+    /// updated since that date (<c>lastUpdatedDate &gt; entity.UpdatedDate</c>); otherwise the result is null.
     /// </summary>
     /// <param name="id">Entity key</param>
-    /// <param name="lastUpdatedDate">Only entities last updated before this date are returned</param>
+    /// <param name="lastUpdatedDate">The entity is returned only when it was last updated before this date</param>
     /// <param name="includeProperties">Extra properties to include</param>
     /// <param name="fixCriteria">Scope criteria always applied</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -189,36 +243,26 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
         string[]? includeProperties = null, Expression<Func<TEntity, bool>>? fixCriteria = null,
         CancellationToken cancellationToken = default)
     {
-        var predicate = GetKeyPredicate(id);
         var propertiesToInclude = new List<string>(DetailsProperties);
         if (includeProperties != null)
         {
             propertiesToInclude.AddRange(includeProperties);
         }
 
-        TEntity? entity;
-        if (predicate == null)
+        var predicateBuilder = PredicateBuilder.New(ResolveKeyPredicate(id));
+        if (lastUpdatedDate.HasValue)
         {
-            entity = await CurrentRepository.GetByKeyAsync(id, propertiesToInclude.Distinct().ToArray(),
-                cancellationToken);
+            var date = lastUpdatedDate.Value;
+            predicateBuilder = predicateBuilder.And(e => date > e.UpdatedDate);
         }
-        else
+
+        if (fixCriteria != null)
         {
-            var predicateBuilder = PredicateBuilder.New(predicate);
-            if (lastUpdatedDate.HasValue)
-            {
-                var date = lastUpdatedDate.Value;
-                predicateBuilder = predicateBuilder.And(e => date > e.UpdatedDate);
-            }
-
-            if (fixCriteria != null)
-            {
-                predicateBuilder = predicateBuilder.And(fixCriteria);
-            }
-
-            entity = await CurrentRepository.FirstOrDefaultAsync(filter: predicateBuilder,
-                includeProperties: propertiesToInclude.Distinct().ToArray(), cancellationToken: cancellationToken);
+            predicateBuilder = predicateBuilder.And(fixCriteria);
         }
+
+        var entity = await CurrentRepository.FirstOrDefaultAsync(filter: predicateBuilder,
+            includeProperties: propertiesToInclude.Distinct().ToArray(), cancellationToken: cancellationToken);
 
         if (entity != null)
         {
@@ -646,7 +690,7 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
     /// <param name="pageNumber">Resulting 1-based page number</param>
     /// <param name="includeProperties">Properties to include</param>
     /// <param name="fixCriteria">Scope criteria always applied</param>
-    /// <param name="flags">Query flags (tracking is always disabled)</param>
+    /// <param name="flags">Query flags (untracked unless <see cref="QueryFlags.EnableTracking"/> is given)</param>
     public virtual IQueryable<TEntity> GetQueryable(ODataQueryOptions<TEntity> query, out int pageSize, out int skip,
         out int pageNumber, string[]? includeProperties = null, Expression<Func<TEntity, bool>>? fixCriteria = null, QueryFlags? flags = null)
     {
@@ -655,7 +699,9 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
 
         //Get the expanded properties
         var extendProperties = GetOdataPropertiesExpandProperties(query, includeProperties);
-        var queryFlags = (flags ?? 0) | QueryFlags.DisableTracking;
+        // OData reads are untracked unless the caller asks for tracking
+        var requested = flags ?? 0;
+        var queryFlags = requested.HasFlag(QueryFlags.EnableTracking) ? requested : requested | QueryFlags.DisableTracking;
         var queryableEntity = CurrentRepository.GetQueryable(extendProperties, queryFlags);
         var populatedQuery = PopulateFilter(query);
         if (populatedQuery.CustomFilter != null)
@@ -672,6 +718,11 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
         {
             var orderBy = GetOdataOrderByQueryOption(query);
             queryableEntity = (IQueryable<TEntity>)orderBy.ApplyTo(queryableEntity, odataSettings);
+        }
+        else
+        {
+            // Skip/Take without an order is not deterministic (and EF warns); fall back to the primary key
+            queryableEntity = CurrentRepository.ApplyKeyOrder(queryableEntity);
         }
 
         if (fixCriteria != null)
@@ -691,13 +742,7 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
     /// <param name="cancellationToken">Cancellation token</param>
     public virtual async Task<bool> Exists(TKey id, CancellationToken cancellationToken = default)
     {
-        var predicate = GetKeyPredicate(id);
-        if (predicate == null)
-        {
-            return await CurrentRepository.GetByKeyAsync(id, cancellationToken: cancellationToken) != null;
-        }
-
-        return await CurrentRepository.AnyAsync(predicate, cancellationToken: cancellationToken);
+        return await CurrentRepository.AnyAsync(ResolveKeyPredicate(id), cancellationToken: cancellationToken);
     }
 
     /// <summary>

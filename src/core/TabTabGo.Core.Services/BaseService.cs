@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+using TabTabGo.Core.Enums;
 using System.Text.Json.Nodes;
 ﻿using System.Net;
 using System.Reflection;
@@ -260,12 +262,8 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             return Array.Empty<TEntity>();
         }
 
-        // an OR of the key predicates: Contains(GetKey(e)) cannot be translated to SQL
-        var predicate = PredicateBuilder.New<TEntity>(false);
-        foreach (var key in keys)
-        {
-            predicate = predicate.Or(GetKeyPredicate(key));
-        }
+        // one IN list (or, without store metadata, a bounded OR): Contains(GetKey(e)) cannot be translated to SQL
+        var predicate = KeysPredicate(keys);
 
         var entities = await CurrentRepository.GetAsync(filter: predicate, cancellationToken: cancellationToken);
         return entities as TEntity[] ?? entities.ToArray();
@@ -309,7 +307,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     public virtual async Task<TEntity> UpdateChanges(TKey id, TEntity entity, CancellationToken cancellationToken)
     {
         var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
-        var current = CurrentEntity != null && GetKeyPredicate(id).Compile()(CurrentEntity)
+        var current = CurrentEntity != null && EqualityComparer<TKey>.Default.Equals(GetKey(CurrentEntity), id)
             ? CurrentEntity
             : await LoadRequiredAsync(id, cancellationToken, includeProperties);
 
@@ -319,9 +317,60 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
 
         var updatedEntity = await CurrentRepository.UpdateAsync(current, cancellationToken) ?? current;
         await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
+        if (_scopeAfterSave != null && !await StillInScopeAsync(id, _scopeAfterSave, cancellationToken))
+            throw NotFound(id);
         await PostUpdate(updatedEntity, cancellationToken);
         return updatedEntity;
     }
+
+    private Expression<Func<TEntity, bool>>? _scopeAfterSave;
+
+    /// <inheritdoc />
+    public virtual async Task<TEntity> UpdateChanges(TKey id, TEntity entity, Expression<Func<TEntity, bool>>? scope,
+        CancellationToken cancellationToken)
+    {
+        if (scope == null)
+        {
+            return await UpdateChanges(id, entity, cancellationToken);
+        }
+
+        // save inside a transaction, ask the database whether the entity is still in scope (foreign keys and
+        // navigations count there), and roll everything back when it is not
+        var ownsTransaction = !_unitOfWork.HasActiveTransaction;
+        if (ownsTransaction)
+        {
+            await _unitOfWork.BeginTransactionAsync(cancellationToken: cancellationToken);
+        }
+
+        _scopeAfterSave = scope;
+        try
+        {
+            var updated = await UpdateChanges(id, entity, cancellationToken);
+            if (ownsTransaction)
+            {
+                await _unitOfWork.CommitAsync(cancellationToken);
+            }
+
+            return updated;
+        }
+        catch
+        {
+            if (ownsTransaction && _unitOfWork.HasActiveTransaction)
+            {
+                await _unitOfWork.RollbackAsync(cancellationToken);
+            }
+
+            throw;
+        }
+        finally
+        {
+            _scopeAfterSave = null;
+        }
+    }
+
+    private async Task<bool> StillInScopeAsync(TKey id, Expression<Func<TEntity, bool>> scope, CancellationToken cancellationToken) =>
+        await CurrentRepository.AnyAsync(PredicateBuilder.New(ResolveKeyPredicate(id)).And(scope),
+            QueryFlags.DisableTracking, cancellationToken);
 
     /// <summary>
     /// Update Entity property
@@ -370,7 +419,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         if (!IsValidToUpdate(current, out var errorMessage))
             throw new ApiException($"Failed to Update {typeof(TEntity).Name} '{id}'. {errorMessage}.", errorNumber: 4002, statusCode: HttpStatusCode.BadRequest);
         await PreUpdate(current, entity, cancellationToken);
-        entity.Populate(current);
+        entity.Populate(current, IsProtectedProperty);
         var updatedEntity = await CurrentRepository.UpdateAsync(current, cancellationToken) ?? current;
         await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
         await PostUpdate(updatedEntity, cancellationToken);
@@ -443,14 +492,9 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         ArgumentNullException.ThrowIfNull(changes);
         foreach (var operation in changes.Operations)
         {
-            foreach (var path in new[] { operation.path, operation.from })
-            {
-                var name = FirstSegment(path);
-                if (name != null && IsProtectedProperty(name))
-                {
-                    throw Protected(name);
-                }
-            }
+            var value = operation.value is Newtonsoft.Json.Linq.JToken token ? token.ToClrValue() : operation.value;
+            EnsurePathPatchable(operation.path, value);
+            EnsurePathPatchable(operation.from, null);
         }
     }
 
@@ -460,15 +504,49 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         ArgumentNullException.ThrowIfNull(changes);
         foreach (var (name, _) in changes)
         {
-            if (IsProtectedProperty(name))
+            EnsureNamePatchable(name);
+        }
+    }
+
+    /// <inheritdoc />
+    public virtual void ApplyJson(JsonObject changes, TEntity entity) => changes.Populate(entity, IsProtectedProperty);
+
+    // JSON pointer: segments are separated by '/', "~1" is a '/' and "~0" a '~' inside a segment
+    private void EnsurePathPatchable(string? path, object? value)
+    {
+        var segments = path?.Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Replace("~1", "/").Replace("~0", "~")).ToArray();
+        if (segments is not { Length: > 0 })
+        {
+            return;
+        }
+
+        EnsureNamePatchable(segments[0]);
+        if (segments[0].Equals(nameof(IEntity.ExtraProperties), StringComparison.OrdinalIgnoreCase)
+            || EntityPropertyGuard.ResolveProperty(typeof(TEntity), segments[0])?.Name == nameof(IEntity.ExtraProperties))
+        {
+            // the bag is changed key by key, with the limits; replacing it as a whole would bypass them
+            if (segments.Length == 1)
             {
-                throw Protected(name);
+                throw Protected(segments[0]);
+            }
+
+            if (value != null)
+            {
+                EntityPropertyGuard.EnsureExtraPropertyAllowed(new Dictionary<string, object?>(), segments[1], value);
             }
         }
     }
 
-    private static string? FirstSegment(string? path) =>
-        path?.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+    // the protection rule runs on the CLR property the client name binds to, never on the client's spelling
+    private void EnsureNamePatchable(string clientName)
+    {
+        var property = EntityPropertyGuard.ResolveProperty(typeof(TEntity), clientName);
+        if (IsProtectedProperty(property?.Name ?? clientName))
+        {
+            throw Protected(property?.Name ?? clientName);
+        }
+    }
 
     private static ApiException Protected(string name) =>
         new($"The property '{name}' cannot be changed this way.", errorNumber: 4004, statusCode: HttpStatusCode.BadRequest, code: "PROTECTED_PROPERTY");

@@ -52,7 +52,6 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
     /// <param name="currentService">Entity service</param>
     /// <param name="mapper">Optional mapper</param>
     /// <param name="validateService">Optional validation service</param>
-    /// <exception cref="InvalidOperationException">There is no mapper and the create request is not an entity</exception>
     public EntityControllerBase(
         ILogger logger,
         IBaseService<TEntity, TKey> currentService,
@@ -61,13 +60,6 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(currentService);
-        if (mapper == null && !typeof(TEntity).IsAssignableFrom(typeof(TCreateRequest)))
-        {
-            throw new InvalidOperationException(
-                $"No mapper was given and {typeof(TCreateRequest).Name} is not a {typeof(TEntity).Name}. " +
-                "Provide an IMapper or use the entity as the create request.");
-        }
-
         _logger = logger;
         _currentService = currentService;
         _mapper = mapper;
@@ -226,6 +218,15 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
                 return BadRequestBody("Invalid create request", $"{EntityName}_Invalid_Create_Request".ToUpperInvariant(), validationResult);
             }
 
+            if (_mapper == null && requestedEntity is not TEntity)
+            {
+                // only create needs the mapper; every other action works without one
+                _logger.LogError("No IMapper is registered and {Request} is not a {EntityName}", typeof(TCreateRequest).Name, EntityName);
+                return Error(HttpStatusCode.InternalServerError, ApiErrorResponses.Failure(
+                    $"Creating {EntityName} needs an IMapper<{EntityName}, {typeof(TViewModel).Name}>: {typeof(TCreateRequest).Name} is not a {EntityName}.",
+                    "MAPPER_REQUIRED", HttpContext));
+            }
+
             _logger.LogInformation("Validation passed for {EntityName}", EntityName);
             var entity = _mapper != null ? _mapper.MapFromRequest(requestedEntity) : requestedEntity as TEntity;
             var createdEntity = await _currentService.Create(entity, cancellationToken);
@@ -296,7 +297,8 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
                 return (BadRequestBody("Invalid patch request", "INVALID_PATCH_REQUEST", validationResult), null);
             }
 
-            await _currentService.UpdateChanges(id, entity, cancellationToken);
+            // saved inside a transaction that the database scope check can veto (foreign keys and navigations count there)
+            await _currentService.UpdateChanges(id, entity, GetFixCriteria, cancellationToken);
 
             return (null, entity);
         }
@@ -319,7 +321,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         return scope != null && !scope.Compile()(entity);
     }
 
-    private static bool IsDefaultKey(TKey id) => id == null || EqualityComparer<TKey>.Default.Equals(id, default!);
+    private static bool IsDefaultKey(TKey id) => id == null || EqualityComparer<TKey>.Default.Equals(id, default!); // justified: a key of a generic type; default is the unset value the comparison wants
 
     /// <summary>
     /// Partially update Entity using patch document
@@ -336,7 +338,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
             return response;
         if (_mapper == null)
             return Ok(entity);
-        return Ok(_mapper.MapToViewModel(entity!));
+        return Ok(_mapper.MapToViewModel(entity!)); // justified: the Ok/Mapper branch is only reached after the patch succeeded, so the entity is set
     }
 
     /// <summary>
@@ -369,7 +371,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
                 return NotFoundEntity(id);
             }
 
-            changes.Populate(entity);
+            _currentService.ApplyJson(changes, entity);
 
             // the patch must not move the entity out of the scope it was found in; nothing is saved
             if (OutOfScope(entity))
@@ -383,7 +385,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
                 return BadRequestBody("Invalid patch request", "INVALID_PATCH_REQUEST", validationResult);
             }
 
-            await _currentService.UpdateChanges(id, entity, cancellationToken);
+            await _currentService.UpdateChanges(id, entity, GetFixCriteria, cancellationToken);
 
             return Ok(entity);
         }
@@ -455,20 +457,18 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         var keys = ids.ToList();
         _logger.LogDebug("REST request to delete list of {EntityName}, {Count} ids", EntityName, keys.Count);
 
-        if (GetFixCriteria != null)
-        {
-            // every id must be inside the scope, otherwise the whole request is a 404
-            foreach (var key in keys)
-            {
-                if (await _currentService.GetByKey(key, fixCriteria: GetFixCriteria, cancellationToken: cancellationToken) == null)
-                {
-                    return NotFoundEntity(key);
-                }
-            }
-        }
-
         try
         {
+            if (GetFixCriteria != null)
+            {
+                // every id must be inside the scope (one query), otherwise the whole request is a 404
+                var distinct = keys.Distinct().Count();
+                if (await _currentService.CountByKeys(keys, GetFixCriteria, cancellationToken) != distinct)
+                {
+                    return NotFound(ApiErrorResponses.NotFound(EntityName, null, HttpContext));
+                }
+            }
+
             if (!await _currentService.CanDelete(keys, cancellationToken))
                 return Error(HttpStatusCode.PreconditionFailed,
                     ApiErrorResponses.Failure($"{EntityName} can't be deleted", $"{EntityName}_Cannot_Delete".ToUpperInvariant(), HttpContext));
