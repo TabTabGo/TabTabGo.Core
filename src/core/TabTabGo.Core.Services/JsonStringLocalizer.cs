@@ -1,8 +1,9 @@
-using System.Reflection;
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Globalization;
+using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
@@ -13,10 +14,15 @@ namespace TabTabGo.Core.Services;
 /// <see cref="IStringLocalizer"/> over JSON resource files. Each culture file is parsed once per process into a frozen
 /// dictionary. Keys may be flat (<c>"AE": "..."</c>) or nested (looked up as <c>a.b.c</c>). Lookup order: the culture, its
 /// parent cultures, other cultures of the same language (for example "ar" finds <c>ar-AE</c>), then the default culture.
+/// A culture name from a caller is never used to build a path: it must look like a culture (<c>xx</c>, <c>xx-YY</c>) and
+/// match a resource that exists, and only existing resources are cached, so callers cannot reach other files or grow the cache.
 /// </summary>
-public class JsonStringLocalizer : IStringLocalizer, ICultureStringLocalizer
+public partial class JsonStringLocalizer : IStringLocalizer, ICultureStringLocalizer
 {
+    private const int MaxCultureLength = 35;
+
     private static readonly ConcurrentDictionary<string, Lazy<FrozenDictionary<string, string>?>> Cache = new();
+    private static readonly ConcurrentDictionary<string, Lazy<string[]>> AvailableCache = new();
 
     private readonly JsonStringLocalizerOptions _options;
     private readonly Assembly? _assembly;
@@ -43,6 +49,16 @@ public class JsonStringLocalizer : IStringLocalizer, ICultureStringLocalizer
 
     /// <summary>Number of resource files parsed by this process (used by tests).</summary>
     internal static int ParseCount;
+
+    /// <summary>Number of cache entries (used by tests).</summary>
+    internal static int CacheCount => Cache.Count;
+
+    /// <summary>Whether a text is acceptable as a culture name: 2-3 letters followed by sub-tags of 2-8 letters or digits.</summary>
+    internal static bool IsValidCultureName(string? culture) =>
+        !string.IsNullOrEmpty(culture) && culture.Length <= MaxCultureLength && CulturePattern().IsMatch(culture);
+
+    [GeneratedRegex("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")]
+    private static partial Regex CulturePattern();
 
     /// <inheritdoc />
     public LocalizedString this[string name]
@@ -118,20 +134,20 @@ public class JsonStringLocalizer : IStringLocalizer, ICultureStringLocalizer
         return null;
     }
 
-    /// <summary>The culture, its parents, other cultures of the same language, then the default culture.</summary>
-    private List<string> Candidates(string culture)
+    /// <summary>The culture, its parents, other cultures of the same language, then the default culture. An invalid name gives only the default.</summary>
+    private List<string> Candidates(string? culture)
     {
         var candidates = new List<string>();
-        var current = culture ?? string.Empty;
-        while (current.Length > 0)
+        if (IsValidCultureName(culture))
         {
-            candidates.Add(current);
-            var dash = current.LastIndexOf('-');
-            current = dash > 0 ? current[..dash] : string.Empty;
-        }
+            var current = culture!;
+            while (current.Length > 0)
+            {
+                candidates.Add(current);
+                var dash = current.LastIndexOf('-');
+                current = dash > 0 ? current[..dash] : string.Empty;
+            }
 
-        if (candidates.Count > 0)
-        {
             var language = candidates[^1];
             candidates.AddRange(AvailableCultures()
                 .Where(c => c.StartsWith(language + "-", StringComparison.OrdinalIgnoreCase) && !candidates.Contains(c, StringComparer.OrdinalIgnoreCase))
@@ -146,7 +162,14 @@ public class JsonStringLocalizer : IStringLocalizer, ICultureStringLocalizer
         return candidates;
     }
 
-    private IEnumerable<string> AvailableCultures()
+    /// <summary>Names of the resources that exist (embedded and files), read once per resource location.</summary>
+    private string[] AvailableCultures()
+    {
+        var key = $"{_assembly?.GetName().FullName}|{_options.ResourcesPath}";
+        return AvailableCache.GetOrAdd(key, _ => new Lazy<string[]>(ListAvailableCultures)).Value;
+    }
+
+    private string[] ListAvailableCultures()
     {
         var cultures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (_assembly != null)
@@ -156,7 +179,11 @@ public class JsonStringLocalizer : IStringLocalizer, ICultureStringLocalizer
             {
                 if (resource.StartsWith(prefix, StringComparison.Ordinal) && resource.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                 {
-                    cultures.Add(resource[prefix.Length..^5]);
+                    var name = resource[prefix.Length..^5];
+                    if (IsValidCultureName(name))
+                    {
+                        cultures.Add(name);
+                    }
                 }
             }
         }
@@ -165,19 +192,35 @@ public class JsonStringLocalizer : IStringLocalizer, ICultureStringLocalizer
         {
             foreach (var file in Directory.EnumerateFiles(_options.ResourcesPath, "*.json"))
             {
-                cultures.Add(Path.GetFileNameWithoutExtension(file));
+                var name = Path.GetFileNameWithoutExtension(file);
+                if (IsValidCultureName(name))
+                {
+                    cultures.Add(name);
+                }
             }
         }
 
-        return cultures;
+        return cultures.ToArray();
     }
 
     private string EmbeddedPrefix() => $"{_assembly!.GetName().Name}.Resources.";
 
-    private FrozenDictionary<string, string>? Load(string culture)
+    private FrozenDictionary<string, string>? Load(string? culture)
     {
-        var cacheKey = $"{_assembly?.GetName().FullName}|{_options.ResourcesPath}|{culture.ToLowerInvariant()}";
-        return Cache.GetOrAdd(cacheKey, _ => new Lazy<FrozenDictionary<string, string>?>(() => Parse(culture))).Value;
+        if (!IsValidCultureName(culture))
+        {
+            return null;
+        }
+
+        // only a name that matches an existing resource gets a cache entry, spelled the way the resource is named
+        var actual = AvailableCultures().FirstOrDefault(c => string.Equals(c, culture, StringComparison.OrdinalIgnoreCase));
+        if (actual == null)
+        {
+            return null;
+        }
+
+        var cacheKey = $"{_assembly?.GetName().FullName}|{_options.ResourcesPath}|{actual}";
+        return Cache.GetOrAdd(cacheKey, _ => new Lazy<FrozenDictionary<string, string>?>(() => Parse(actual))).Value;
     }
 
     private FrozenDictionary<string, string>? Parse(string culture)
@@ -198,8 +241,8 @@ public class JsonStringLocalizer : IStringLocalizer, ICultureStringLocalizer
             }
         }
 
-        var filePath = Path.Combine(_options.ResourcesPath, culture + ".json");
-        if (File.Exists(filePath))
+        var filePath = SafeFilePath(culture);
+        if (filePath != null && File.Exists(filePath))
         {
             // file entries override embedded ones
             using var stream = File.OpenRead(filePath);
@@ -215,6 +258,16 @@ public class JsonStringLocalizer : IStringLocalizer, ICultureStringLocalizer
 
         Interlocked.Increment(ref ParseCount);
         return values.ToFrozenDictionary();
+    }
+
+    /// <summary>The resource file path, or null when it would fall outside the resources folder.</summary>
+    private string? SafeFilePath(string culture)
+    {
+        var root = Path.GetFullPath(_options.ResourcesPath);
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+        var full = Path.GetFullPath(Path.Combine(root, culture + ".json"));
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return full.StartsWith(rootWithSeparator, comparison) ? full : null;
     }
 
     private static void Flatten(string path, JsonElement element, Dictionary<string, string> values)

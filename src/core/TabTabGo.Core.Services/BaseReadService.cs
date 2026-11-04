@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.OData.UriParser;
 using TabTabGo.Core.Data;
 using TabTabGo.Core.Entities;
+using TabTabGo.Core.Exceptions;
 using TabTabGo.Core.Enums;
 using TabTabGo.Core.Models;
 using TabTabGo.Core.Services.OData;
@@ -19,7 +20,7 @@ namespace TabTabGo.Core.Services;
 /// </summary>
 /// <typeparam name="TEntity">Entity type</typeparam>
 /// <typeparam name="TKey">Entity key type</typeparam>
-public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity, TKey>
+public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity, TKey>
     where TEntity : class, IEntity
 {
     /// <summary>Page size used when a request does not ask for one.</summary>
@@ -496,70 +497,137 @@ public abstract class BaseReadService<TEntity, TKey> : IBaseReadService<TEntity,
     }
 
     /// <summary>
-    /// Custom odata Filter function
+    /// Builds the SQL for <c>xmlExist(path, 'value')</c> filters. Nothing the caller sent is pasted into the SQL text:
+    /// every path segment must be a mapped property of the entity (walked through the CLR model) and the value must be
+    /// exactly one quoted literal, which travels as the SQL parameter <c>@pN</c> (N is its index in <paramref name="parameters"/>).
+    /// The element text of the xml column is compared with the value: <c>col.exist('//*[text() = sql:variable("@pN")]') = 1</c>.
     /// </summary>
     /// <param name="alias">Table alias</param>
     /// <param name="list">The calls</param>
-    /// <param name="parameters">Sql parameters</param>
+    /// <param name="parameters">Sql parameter values; the value at index N is <c>@pN</c></param>
+    /// <exception cref="ApiException">A path or value is not acceptable (400)</exception>
     protected virtual string QueryXmlExist(string alias, List<CustomOdataFiler> list, out List<object> parameters)
     {
-        var propertyGroup = list.GroupBy(g => g.Parameters.FirstOrDefault()).ToList();
-
-        parameters = new List<object>();
+        var values = new List<object>();
+        parameters = values;
 
         var whereBuilder = new StringBuilder();
         var joinBuilder = new StringBuilder();
-
         var addedTables = new List<string>();
-        foreach (var item in propertyGroup.Where(i => i.Key != null))
+
+        foreach (var call in list)
         {
-            var currentAlies = alias;
-            var navProperties = item.Key!.Split('/');
-
-            if (navProperties.Length > 0)
+            if (call.Parameters.Count != 2)
             {
-                var navIndex = 0;
-                if (navProperties.Length > 1)
-                {
-                    for (; navIndex < navProperties.Length - 1; navIndex++)
-                    {
-                        var joinProp = CustomQueryJoinQuery(navProperties[navIndex]);
-                        if (!addedTables.Contains(navProperties[navIndex]))
-                        {
-                            joinBuilder.AppendLine(joinProp.JoinQuery);
-                            addedTables.Add(navProperties[navIndex]);
-                        }
+                throw InvalidFilter("xmlExist needs exactly two arguments: a property path and one quoted value.");
+            }
 
-                        currentAlies = joinProp.Alias;
-                    }
+            var navProperties = ValidatePropertyPath(call.Parameters[0]);
+            var value = ParseSingleLiteral(call.Parameters[1]);
+
+            var currentAlias = alias;
+            for (var navIndex = 0; navIndex < navProperties.Length - 1; navIndex++)
+            {
+                var joinProp = CustomQueryJoinQuery(navProperties[navIndex]);
+                if (!addedTables.Contains(navProperties[navIndex]))
+                {
+                    joinBuilder.AppendLine(joinProp.JoinQuery);
+                    addedTables.Add(navProperties[navIndex]);
                 }
 
-                if (item.Any(v => v.Parameters.Count > 1))
-                {
-                    whereBuilder.Append("( ");
+                currentAlias = joinProp.Alias;
+            }
 
-                    foreach (var value in item.Where(v => v.Parameters.Count > 1))
-                    {
-                        whereBuilder.Append(
-                            $" {currentAlies}.{navProperties[navIndex]}.exist({value.Parameters[1]}) = 1 ");
-                        whereBuilder.Append(" or ");
-                    }
-
-                    whereBuilder.Remove(whereBuilder.Length - 5, 5);
-                    whereBuilder.Append(" )");
-                }
-
+            var parameterName = "@p" + values.Count;
+            values.Add(value);
+            if (whereBuilder.Length > 0)
+            {
                 whereBuilder.Append(" and ");
             }
-        }
 
-        if (whereBuilder.Length >= 5)
-        {
-            whereBuilder.Remove(whereBuilder.Length - 5, 5);
+            whereBuilder.Append($"{currentAlias}.{navProperties[^1]}.exist('//*[text() = sql:variable(\"{parameterName}\")]') = 1");
         }
 
         return $"{joinBuilder} WHERE {whereBuilder}";
     }
+
+    private static ApiException InvalidFilter(string message) =>
+        new($"Invalid $filter. {message}", statusCode: System.Net.HttpStatusCode.BadRequest, code: "InvalidFilter");
+
+    /// <summary>The value must be one quoted literal and nothing else; quotes inside are doubled.</summary>
+    private static string ParseSingleLiteral(string argument)
+    {
+        const int maxLength = 1000;
+        var text = argument.Trim();
+        if (text.Length < 2 || (text[0] != '\'' && text[0] != '"') || text[^1] != text[0])
+        {
+            throw InvalidFilter("The value must be a single quoted literal.");
+        }
+
+        var quote = text[0];
+        var body = text[1..^1];
+        for (var i = 0; i < body.Length; i++)
+        {
+            if (body[i] != quote)
+            {
+                continue;
+            }
+
+            // a doubled quote is an escaped quote; a lone quote would end the literal early
+            if (i + 1 < body.Length && body[i + 1] == quote)
+            {
+                i++;
+                continue;
+            }
+
+            throw InvalidFilter("The value must be a single quoted literal.");
+        }
+
+        var value = body.Replace(new string(quote, 2), quote.ToString());
+        if (value.Length > maxLength)
+        {
+            throw InvalidFilter("The value is too long.");
+        }
+
+        return value;
+    }
+
+    /// <summary>
+    /// Splits <c>a/b/c</c> and checks that each segment is a plain identifier and a public property of the type reached so far
+    /// (collection properties continue with their element type).
+    /// </summary>
+    private static string[] ValidatePropertyPath(string path)
+    {
+        var segments = path.Trim().Split('/');
+        var type = typeof(TEntity);
+        var result = new string[segments.Length];
+        for (var i = 0; i < segments.Length; i++)
+        {
+            var segment = segments[i];
+            if (!IdentifierPattern().IsMatch(segment))
+            {
+                throw InvalidFilter($"'{(segment.Length > 40 ? segment[..40] : segment)}' is not a valid property name.");
+            }
+
+            var property = type.GetProperty(segment, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            if (property == null)
+            {
+                throw InvalidFilter($"'{segment}' is not a property of {type.Name}.");
+            }
+
+            result[i] = property.Name;
+            type = property.PropertyType;
+            if (type != typeof(string) && typeof(System.Collections.IEnumerable).IsAssignableFrom(type) && type.IsGenericType)
+            {
+                type = type.GetGenericArguments()[0];
+            }
+        }
+
+        return result;
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]{0,127}$")]
+    private static partial System.Text.RegularExpressions.Regex IdentifierPattern();
 
     #endregion
 
