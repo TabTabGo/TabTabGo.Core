@@ -128,6 +128,30 @@ internal static class ODataFilterTokenizer
             return items.Count == 1 ? items[0] : new And(items);
         }
 
+        // a boolean group is "( expr )" followed by the end, ')' , 'and' or 'or'; anything else is part of a larger condition
+        private Group? TryParseGroup()
+        {
+            try
+            {
+                _position++;
+                var inner = ParseExpression();
+                SkipWhitespace();
+                if (_position >= text.Length || text[_position] != ')')
+                {
+                    return null;
+                }
+
+                _position++;
+                SkipWhitespace();
+                var closesCondition = _position >= text.Length || text[_position] == ')' || NextWordIs("and") || NextWordIs("or");
+                return closesCondition ? new Group(inner) : null;
+            }
+            catch (ApiException)
+            {
+                return null;
+            }
+        }
+
         private Node ParseFactor()
         {
             SkipWhitespace();
@@ -139,16 +163,15 @@ internal static class ODataFilterTokenizer
             SkipWhitespace();
             if (_position < text.Length && text[_position] == '(')
             {
-                _position++;
-                var inner = ParseExpression();
-                SkipWhitespace();
-                if (_position >= text.Length || text[_position] != ')')
+                var start = _position;
+                var group = TryParseGroup();
+                if (group != null)
                 {
-                    throw Invalid("Missing ')'.");
+                    return group;
                 }
 
-                _position++;
-                return new Group(inner);
+                // "(A add 1) gt 2": the parenthesis is an operand of a comparison, not a boolean group
+                _position = start;
             }
 
             return ParseAtom();
@@ -193,6 +216,11 @@ internal static class ODataFilterTokenizer
                 }
 
                 _position++;
+            }
+
+            if (depth > 0)
+            {
+                throw Invalid("Missing ')'.");
             }
 
             var atomText = text[start.._position].Trim();

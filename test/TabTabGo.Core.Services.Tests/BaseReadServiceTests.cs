@@ -342,6 +342,30 @@ public class BaseReadServiceTests : ServiceTestBase
         Assert.Null(custom);
     }
 
+    [Theory]
+    [InlineData("(Price mul Id) gt 100")]
+    [InlineData("((Price add 1) mul (Id sub 2)) gt 100")]
+    [InlineData("contains(Name,'xml') and (Price add 1) gt 2")] // 'xml' in a literal is not the function
+    public void PopulateFilter_StandardFilterWithGroupedOperands_PassesThroughUntouched(string filter)
+    {
+        var service = new ExposedService(UnitOfWork);
+        var options = ODataTestHelper.Create("$filter=" + filter);
+
+        var (populated, custom) = service.Populate(options);
+
+        Assert.Same(options.Filter, populated);
+        Assert.Null(custom);
+    }
+
+    [Fact]
+    public async Task GetPageList_ODataGroupedArithmeticFilter_Works()
+    {
+        var page = await Service.GetPageList(ODataTestHelper.Create("$filter=(Price mul Id) gt 3000&$orderby=Id"), cancellationToken: Ct);
+
+        Assert.True(page.Count > 0);
+        Assert.All(page.Items, p => Assert.True(p.Price * p.Id > 3000));
+    }
+
     [Fact]
     public void PopulateFilter_NoFilter_ReturnsNothing()
     {

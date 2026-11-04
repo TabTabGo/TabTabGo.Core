@@ -156,4 +156,28 @@ public class ODataFilterTokenizerTests
 
         Assert.Equal(new[] { "a", "'x, y'" }, result.CustomFilters[0].Parameters);
     }
+
+    [Theory]
+    [InlineData("(A add 1) gt 2")]
+    [InlineData("(Price mul Qty) gt 100")]
+    [InlineData("((A add 1) mul (B sub 2)) gt 2")]
+    [InlineData("A gt 1 and (Price mul Qty) gt 100")]
+    [InlineData("((A add 1) gt 2)")]
+    public void Split_GroupedArithmeticOperands_ParseAsConditions(string filter)
+    {
+        // a parenthesised operand used to throw 400 "Unexpected 'g'"
+        var result = Split(filter + " and xmlExist(a,'v')");
+
+        Assert.Equal(filter, result.Filter);
+        Assert.Single(result.CustomFilters);
+        Assert.Equal(filter, Split(filter).Filter);
+    }
+
+    [Fact]
+    public void Split_ArithmeticGroupNextToBooleanGroup()
+    {
+        var result = Split("((A add 1) gt 2 or B eq 1) and xmlExist(a,'v')");
+
+        Assert.Equal("((A add 1) gt 2 or B eq 1)", result.Filter);
+    }
 }
