@@ -346,6 +346,7 @@ public class BaseReadServiceTests : ServiceTestBase
     [InlineData("(Price mul Id) gt 100")]
     [InlineData("((Price add 1) mul (Id sub 2)) gt 100")]
     [InlineData("contains(Name,'xml') and (Price add 1) gt 2")] // 'xml' in a literal is not the function
+    [InlineData("Name eq 'xmlExist(a,b)' and (Price add 1) gt 2")] // nor is the whole call inside a literal (C1)
     public void PopulateFilter_StandardFilterWithGroupedOperands_PassesThroughUntouched(string filter)
     {
         var service = new ExposedService(UnitOfWork);
@@ -358,6 +359,33 @@ public class BaseReadServiceTests : ServiceTestBase
         Assert.Equal(before, TabTabGo.Core.Services.OData.ODataFilterTokenizer.Calls); // the tokenizer never saw it
         Assert.Same(options.Filter, populated);
         Assert.Null(custom);
+    }
+
+    [Fact]
+    public void PopulateFilter_HugeFilterWithoutTheCustomFunction_NeverReachesTheTokenizer()
+    {
+        var service = new ExposedService(UnitOfWork);
+        var filter = new string('(', 5_000) + "Price gt 1" + new string(')', 5_000);
+        var options = ODataTestHelper.Create("$filter=" + filter);
+        var before = TabTabGo.Core.Services.OData.ODataFilterTokenizer.Calls;
+
+        var (populated, custom) = service.Populate(options);
+
+        Assert.Equal(before, TabTabGo.Core.Services.OData.ODataFilterTokenizer.Calls);
+        Assert.Same(options.Filter, populated);
+        Assert.Null(custom);
+    }
+
+    [Fact]
+    public void PopulateFilter_HugeFilterWithTheCustomFunction_Is400NotAStackOverflow()
+    {
+        var service = new ExposedService(UnitOfWork);
+        var filter = new string('(', 5_000) + "xmlExist(a,'v')" + new string(')', 5_000);
+        var options = ODataTestHelper.Create("$filter=" + filter);
+
+        var ex = Assert.Throws<TabTabGo.Core.Exceptions.ApiException>(() => service.Populate(options));
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, ex.HttpStatusCode);
     }
 
     [Fact]
