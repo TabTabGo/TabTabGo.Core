@@ -40,14 +40,19 @@ public interface IBaseService<TEntity, TKey> : IBaseReadService<TEntity, TKey> w
     /// <summary>
     /// Saves the changes made to an entity this service loaded, and only keeps them when the entity is still inside
     /// <paramref name="scope"/> afterwards (checked in the database, so foreign keys and navigations count). When it left the
-    /// scope the changes are rolled back and a 404 <c>ApiException</c> is thrown. The default implementation ignores the scope.
+    /// scope the changes are rolled back and a 404 <c>ApiException</c> is thrown. The default implementation cannot enforce a
+    /// scope, so it throws a 500 <c>ApiException</c> (<c>SCOPE_NOT_ENFORCED</c>) when one is given instead of saving outside it.
     /// </summary>
     /// <param name="id">Entity key</param>
     /// <param name="entity">The changed entity</param>
     /// <param name="scope">Scope the entity must stay in; null means no scope</param>
     /// <param name="cancellationToken">Cancellation token</param>
     Task<TEntity> UpdateChanges(TKey id, TEntity entity, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
-        => UpdateChanges(id, entity, cancellationToken);
+        => scope == null
+            ? UpdateChanges(id, entity, cancellationToken)
+            : throw new Exceptions.ApiException(
+                "This service cannot enforce a scope on an update, so the update was not performed.",
+                statusCode: System.Net.HttpStatusCode.InternalServerError, code: "SCOPE_NOT_ENFORCED");
 
     /// <summary>
     /// Merges a partial JSON object into an entity the way <see cref="Update(TKey, JsonObject, CancellationToken)"/> does
@@ -90,6 +95,25 @@ public interface IBaseService<TEntity, TKey> : IBaseReadService<TEntity, TKey> w
     void EnsurePatchable(JsonObject changes)
     {
     }
+
+    /// <summary>
+    /// Like <see cref="EnsurePatchable(JsonPatchDocument{TEntity})"/>, and also rejects a patch of a property the
+    /// <paramref name="scope"/> is defined on (the tenant column, the foreign key a navigation scope goes through). The default
+    /// implementation applies the plain rule only.
+    /// </summary>
+    /// <param name="changes">The patch document</param>
+    /// <param name="scope">The scope the caller reads and writes within; null means none</param>
+    /// <exception cref="Exceptions.ApiException">A protected or scope-defining property is patched (400)</exception>
+    void EnsurePatchable(JsonPatchDocument<TEntity> changes, Expression<Func<TEntity, bool>>? scope) => EnsurePatchable(changes);
+
+    /// <summary>
+    /// Like <see cref="EnsurePatchable(JsonObject)"/>, and also rejects a property the <paramref name="scope"/> is defined on.
+    /// The default implementation applies the plain rule only.
+    /// </summary>
+    /// <param name="changes">The partial entity</param>
+    /// <param name="scope">The scope the caller reads and writes within; null means none</param>
+    /// <exception cref="Exceptions.ApiException">A protected or scope-defining property is named (400)</exception>
+    void EnsurePatchable(JsonObject changes, Expression<Func<TEntity, bool>>? scope) => EnsurePatchable(changes);
 
     #endregion
 

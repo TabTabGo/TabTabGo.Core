@@ -548,6 +548,102 @@ public class ScopeAndBoundsTests : ServiceTestBase
         public int GetKey(Product entity) => entity.Id;
     }
 
+    // --- fail closed on scope --------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task DefaultScopedUpdateChanges_WithAScope_FailsClosed()
+    {
+        IBaseService<Product, int> port = new OnlyGetByKeyService();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => port.UpdateChanges(1, new Product(), p => p.Tenant == "A", Ct));
+
+        Assert.Equal("SCOPE_NOT_ENFORCED", ex.ErrorCode);
+        Assert.Equal(HttpStatusCode.InternalServerError, ex.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task DefaultScopedUpdateChanges_WithoutAScope_CallsThePlainOverload()
+    {
+        IBaseService<Product, int> port = new OnlyGetByKeyService();
+
+        // the stub's plain overload throws NotSupportedException: reaching it proves the call went through
+        await Assert.ThrowsAsync<NotSupportedException>(() => port.UpdateChanges(1, new Product(), null, Ct));
+    }
+
+    private static readonly System.Text.Json.Nodes.JsonObject TenantChange = System.Text.Json.Nodes.JsonNode.Parse("{\"tenant\":\"B\"}")!.AsObject();
+
+    private static JsonPatchDocument<Product> PatchOf(string path) =>
+        new(new List<Operation<Product>> { new("replace", path, null, "x") }, new Newtonsoft.Json.Serialization.DefaultContractResolver());
+
+    [Fact]
+    public void EnsurePatchable_ScopedPatchOfAScopeMember_IsRejected()
+    {
+        var ex = Assert.Throws<ApiException>(() => Service.EnsurePatchable(PatchOf("/tenant"), p => p.Tenant == "A"));
+
+        Assert.Equal("PROTECTED_PROPERTY", ex.ErrorCode);
+        Assert.Throws<ApiException>(() => Service.EnsurePatchable(TenantChange, p => p.Tenant == "A"));
+    }
+
+    [Fact]
+    public void EnsurePatchable_ScopedPatchOfAnotherMember_IsAccepted()
+    {
+        Service.EnsurePatchable(PatchOf("/name"), p => p.Tenant == "A");
+        Service.EnsurePatchable(System.Text.Json.Nodes.JsonNode.Parse("{\"name\":\"n\"}")!.AsObject(), p => p.Tenant == "A");
+        Service.EnsurePatchable(PatchOf("/tenant"), null); // no scope: no scope member
+    }
+
+    [Fact]
+    public void EnsurePatchable_NavigationScope_ProtectsTheNavigationAndItsForeignKey()
+    {
+        Expression<Func<Product, bool>> scope = p => p.Category!.Name == "Hardware";
+
+        Assert.Throws<ApiException>(() => Service.EnsurePatchable(PatchOf("/categoryId"), scope));
+        Assert.Throws<ApiException>(() => Service.EnsurePatchable(PatchOf("/CATEGORYID"), scope));
+        Service.EnsurePatchable(PatchOf("/name"), scope);
+    }
+
+    [Fact]
+    public void EnsurePatchable_ScopeMembersFromEfPropertyAndMoveFrom_AreProtected()
+    {
+        Expression<Func<Product, bool>> scope = p => EF.Property<string>(p, "Tenant") == "A";
+
+        Assert.Throws<ApiException>(() => Service.EnsurePatchable(PatchOf("/tenant"), scope));
+        var move = new JsonPatchDocument<Product>(new List<Operation<Product>> { new("move", "/name", "/tenant") },
+            new Newtonsoft.Json.Serialization.DefaultContractResolver());
+        Assert.Throws<ApiException>(() => Service.EnsurePatchable(move, scope));
+    }
+
+    [Fact]
+    public void EnsurePatchable_ClosureValuesInTheScope_AreNotMembers()
+    {
+        var tenant = "A";
+        Service.EnsurePatchable(PatchOf("/price"), p => p.Tenant == tenant);
+    }
+
+    [Fact]
+    public void EnsurePatchable_OptOutOverride_AllowsScopeMembers()
+    {
+        Service.ScopeMembersPatchable = true;
+
+        Service.EnsurePatchable(PatchOf("/tenant"), p => p.Tenant == "A");
+        Service.EnsurePatchable(TenantChange, p => p.Tenant == "A");
+    }
+
+    [Fact]
+    public void EnsurePatchable_StillAppliesTheProtectedRuleWithAScope()
+    {
+        Assert.Throws<ApiException>(() => Service.EnsurePatchable(PatchOf("/id"), p => p.Tenant == "A"));
+    }
+
+    [Fact]
+    public void DefaultScopedEnsurePatchable_FallsBackToThePlainRule()
+    {
+        IBaseService<Product, int> port = new OnlyGetByKeyService();
+
+        port.EnsurePatchable(PatchOf("/tenant"), p => p.Tenant == "A");
+        port.EnsurePatchable(TenantChange, p => p.Tenant == "A");
+    }
+
     [Fact]
     public void EnsureExtraPropertiesWithinLimits_ChecksTheWholeBag()
     {

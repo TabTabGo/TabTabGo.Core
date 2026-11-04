@@ -488,6 +488,63 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         }
     }
 
+    /// <summary>
+    /// Whether a client may not change a property the scope is defined on. Override to return false to allow it (the
+    /// caller then owns the risk of moving an entity between scopes).
+    /// </summary>
+    /// <param name="propertyName">CLR property name</param>
+    /// <param name="scopeMembers">Members of the entity the scope refers to, with the foreign keys of the navigations among them</param>
+    protected virtual bool IsScopeDefiningProperty(string propertyName, IReadOnlySet<string> scopeMembers) =>
+        scopeMembers.Contains(propertyName);
+
+    /// <inheritdoc />
+    public virtual void EnsurePatchable(JsonPatchDocument<TEntity> changes, Expression<Func<TEntity, bool>>? scope)
+    {
+        EnsurePatchable(changes);
+        var members = ScopeMemberFinder.Find(scope, typeof(TEntity));
+        if (members.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var operation in changes.Operations)
+        {
+            EnsureNotScopeDefining(operation.path, members);
+            EnsureNotScopeDefining(operation.from, members);
+        }
+    }
+
+    /// <inheritdoc />
+    public virtual void EnsurePatchable(JsonObject changes, Expression<Func<TEntity, bool>>? scope)
+    {
+        EnsurePatchable(changes);
+        var members = ScopeMemberFinder.Find(scope, typeof(TEntity));
+        if (members.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (name, _) in changes)
+        {
+            EnsureNotScopeDefining(name, members);
+        }
+    }
+
+    private void EnsureNotScopeDefining(string? pathOrName, IReadOnlySet<string> members)
+    {
+        var first = pathOrName?.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Replace("~1", "/").Replace("~0", "~");
+        if (first == null)
+        {
+            return;
+        }
+
+        var name = EntityPropertyGuard.ResolveProperty(typeof(TEntity), first)?.Name ?? first;
+        if (IsScopeDefiningProperty(name, members))
+        {
+            throw Protected(name);
+        }
+    }
+
     /// <inheritdoc />
     public virtual void EnsurePatchable(JsonObject changes)
     {

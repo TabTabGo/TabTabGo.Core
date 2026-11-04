@@ -267,7 +267,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
 
         try
         {
-            _currentService.EnsurePatchable(changes);
+            _currentService.EnsurePatchable(changes, GetFixCriteria);
 
             // looked up inside the scope: an entity outside the scope is a 404, as on GET
             var entity = await _currentService.GetByKey(id, fixCriteria: GetFixCriteria, cancellationToken: cancellationToken);
@@ -287,6 +287,12 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
 
             // the operations add up in the entity's own bag: check the result, not each operation
             _currentService.EnsureExtraPropertiesWithinLimits(entity);
+
+            // second layer: a patch that is definitely outside the scope never reaches the service
+            if (ScopeCheck.IsDefinitelyOutside(GetFixCriteria, entity))
+            {
+                return (NotFoundEntity(id), null);
+            }
 
             var validationResult = _validateService != null ? await _validateService.Validate(entity, cancellationToken) : null;
             if (validationResult is { IsValid: false })
@@ -354,7 +360,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
 
         try
         {
-            _currentService.EnsurePatchable(changes);
+            _currentService.EnsurePatchable(changes, GetFixCriteria);
 
             // looked up inside the scope: an entity outside the scope is a 404, as on GET
             var entity = await _currentService.GetByKey(id, fixCriteria: GetFixCriteria, cancellationToken: cancellationToken);
@@ -365,6 +371,12 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
 
             _currentService.ApplyJson(changes, entity);
             _currentService.EnsureExtraPropertiesWithinLimits(entity);
+
+            // second layer: a patch that is definitely outside the scope never reaches the service
+            if (ScopeCheck.IsDefinitelyOutside(GetFixCriteria, entity))
+            {
+                return NotFoundEntity(id);
+            }
 
             var validationResult = _validateService != null ? await _validateService.Validate(entity, cancellationToken) : null;
             if (validationResult is { IsValid: false })

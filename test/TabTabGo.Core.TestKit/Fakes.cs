@@ -28,6 +28,12 @@ public class TestProductService : BaseService<Product, int>
     /// <summary>False leaves the navigations unloaded, as a service that overrides <c>IncludeProperties</c> with nothing does.</summary>
     public bool IncludeCategory { get; set; } = true;
 
+    /// <summary>True opts out of rejecting patches of the members the scope is defined on (the tests that reach the later layers).</summary>
+    public bool ScopeMembersPatchable { get; set; }
+
+    protected override bool IsScopeDefiningProperty(string propertyName, IReadOnlySet<string> scopeMembers) =>
+        !ScopeMembersPatchable && base.IsScopeDefiningProperty(propertyName, scopeMembers);
+
     protected override string[] IncludeProperties => IncludeCategory ? new[] { nameof(Product.Category) } : Array.Empty<string>();
 
     protected override string[] IgnoredProperties { get; } = new[] { nameof(Product.Category) };

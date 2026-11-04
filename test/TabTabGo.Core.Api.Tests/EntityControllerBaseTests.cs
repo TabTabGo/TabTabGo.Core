@@ -230,7 +230,7 @@ public class EntityControllerBaseTests
     [Fact]
     public async Task Patch_ForeignKeyMovesTheEntityOutOfScope_Is404AndNothingPersisted()
     {
-        await using var app = await TestApp.StartAsync(options: o => o.GetFixCriteria = p => p.Category!.Name == "Hardware");
+        await using var app = await TestApp.StartAsync(options: o => o.GetFixCriteria = p => p.Category!.Name == "Hardware", services: ScopeMembersPatchable);
         int other;
         await using (var context = app.Db.CreateContext())
         {
@@ -264,7 +264,7 @@ public class EntityControllerBaseTests
     [Fact]
     public async Task Controller_PatchForeignKeyOutOfScope_Is404AndNothingPersisted()
     {
-        await using var app = await Start();
+        await using var app = await Start(services: ScopeMembersPatchable);
         int other;
         await using (var context = app.Db.CreateContext())
         {
@@ -285,6 +285,11 @@ public class EntityControllerBaseTests
     }
 
     // --- H3: a scope over a navigation must not be evaluated in memory ---
+
+    private static void ScopeMembersPatchable(IServiceCollection services) =>
+        services.AddScoped<TabTabGo.Core.Services.IBaseService<Product, int>>(sp =>
+            new TestProductService(sp.GetRequiredService<TabTabGo.Core.Data.IUnitOfWork>(),
+                sp.GetRequiredService<ILogger<TabTabGo.Core.Services.BaseService<Product, int>>>()) { ScopeMembersPatchable = true });
 
     private static void ServiceWithoutIncludes(IServiceCollection services) =>
         services.AddScoped<TabTabGo.Core.Services.IBaseService<Product, int>>(sp =>
@@ -334,6 +339,183 @@ public class EntityControllerBaseTests
 
         var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2",
             Json("[{\"op\":\"replace\",\"path\":\"/name\",\"value\":\"nav\"}]", "application/json-patch+json")), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    // --- fail closed: scope enforcement is not optional ---
+
+    /// <summary>Stands in for an 8.x service that has the default scoped UpdateChanges and ignores nothing it can enforce.</summary>
+    private sealed class ScopeBlindService(TestProductService inner, bool ignoreScopeOnGet = false) : TabTabGo.Core.Services.IBaseService<Product, int>
+    {
+        public int UpdateChangesCalls { get; private set; }
+
+        public Task<Product?> GetByKey(int id, DateTimeOffset? lastUpdatedDate = null, string[]? includeProperties = null,
+            System.Linq.Expressions.Expression<Func<Product, bool>>? fixCriteria = null, CancellationToken cancellationToken = default) =>
+            inner.GetByKey(id, lastUpdatedDate, includeProperties, ignoreScopeOnGet ? null : fixCriteria, cancellationToken);
+
+        public Task<Product> Update(int id, Product entity, CancellationToken cancellationToken = default) => inner.Update(id, entity, cancellationToken);
+
+        public Task<Product> UpdateChanges(int id, Product entity, CancellationToken cancellationToken)
+        {
+            UpdateChangesCalls++;
+            return inner.UpdateChanges(id, entity, cancellationToken);
+        }
+
+        public Task<Product> Update(int id, Microsoft.AspNetCore.JsonPatch.JsonPatchDocument<Product> entity, CancellationToken cancellationToken = default) =>
+            inner.Update(id, entity, cancellationToken);
+
+        public Task<Product> Update(int id, System.Text.Json.Nodes.JsonObject entity, CancellationToken cancellationToken = default) =>
+            inner.Update(id, entity, cancellationToken);
+
+        public void HandleJsonOperator(Microsoft.AspNetCore.JsonPatch.Operations.Operation operation, object affectedObject) =>
+            inner.HandleJsonOperator(operation, affectedObject);
+
+        public Task<Product> Create(Product? entity, CancellationToken cancellationToken = default) => inner.Create(entity, cancellationToken);
+
+        public Task<Product> Delete(int id, CancellationToken cancellationToken = default) => inner.Delete(id, cancellationToken);
+
+        public Task<bool> CanDelete(int id, CancellationToken cancellationToken = default) => inner.CanDelete(id, cancellationToken);
+
+        public Task<bool> CanDelete(IEnumerable<int> ids, CancellationToken cancellationToken) => inner.CanDelete(ids, cancellationToken);
+
+        public Task<IEnumerable<Product>> Delete(IEnumerable<int> ids, CancellationToken cancellationToken) => inner.Delete(ids, cancellationToken);
+
+        public Task<IEnumerable<Product>> GetList(System.Linq.Expressions.Expression<Func<Product, bool>> query, string[]? includeProperties = null,
+            TabTabGo.Core.Enums.QueryFlags? flags = null, CancellationToken cancellationToken = default) =>
+            inner.GetList(query, includeProperties, flags, cancellationToken);
+
+        public Task<TabTabGo.Core.Models.PageList<Product>> GetPageList(System.Linq.Expressions.Expression<Func<Product, bool>> query,
+            Func<IQueryable<Product>, IOrderedQueryable<Product>>? orderBy = null, int page = 0, int pageSize = 25, string[]? includeProperties = null,
+            TabTabGo.Core.Enums.QueryFlags? flags = null, CancellationToken cancellationToken = default) =>
+            inner.GetPageList(query, orderBy, page, pageSize, includeProperties, flags, cancellationToken);
+
+        public Task<TabTabGo.Core.Models.PageList<Product>> GetPageList(object oDataQueryOptions, System.Linq.Expressions.Expression<Func<Product, bool>>? fixCriteria = null,
+            string[]? includeProperties = null, TabTabGo.Core.Enums.QueryFlags? flags = null, CancellationToken cancellationToken = default) =>
+            inner.GetPageList(oDataQueryOptions, fixCriteria, includeProperties, flags, cancellationToken);
+
+        public Task<TabTabGo.Core.Models.PageList<object>> GetViewModels(object oDataQueryOptions,
+            System.Linq.Expressions.Expression<Func<Product, bool>>? fixCriteria = null, CancellationToken cancellationToken = default) =>
+            inner.GetViewModels(oDataQueryOptions, fixCriteria, cancellationToken);
+
+        public Task<TabTabGo.Core.Models.PageList<TResult>> GetViewModels<TResult>(object oDataQueryOptions, Func<Product, TResult> mapper,
+            System.Linq.Expressions.Expression<Func<Product, bool>>? fixCriteria = null, string[]? includeProperties = null, CancellationToken cancellationToken = default)
+            where TResult : class => inner.GetViewModels(oDataQueryOptions, mapper, fixCriteria, includeProperties, cancellationToken);
+
+        public Task<TResult?> GetViewModelByKey<TResult>(int id, Func<Product, TResult> mapper, DateTimeOffset? lastUpdatedDate = null,
+            string[]? includeProperties = null, System.Linq.Expressions.Expression<Func<Product, bool>>? fixCriteria = null, CancellationToken cancellationToken = default)
+            where TResult : class => inner.GetViewModelByKey(id, mapper, lastUpdatedDate, includeProperties, fixCriteria, cancellationToken);
+
+        public Task<bool> Exists(int id, CancellationToken cancellationToken = default) => inner.Exists(id, cancellationToken);
+
+        public Task<Stream> ExportFile<TResult>(TabTabGo.Core.ViewModels.ExportConfiguration config, object oDataQueryOptions,
+            System.Linq.Expressions.Expression<Func<Product, bool>>? fixCriteria = null, string[]? includeProperties = null, CancellationToken cancellationToken = default)
+            where TResult : class => inner.ExportFile<TResult>(config, oDataQueryOptions, fixCriteria, includeProperties, cancellationToken);
+
+        public System.Linq.Expressions.Expression<Func<Product, bool>> GetKeyPredicate(int id) => inner.GetKeyPredicate(id);
+
+        public int GetKey(Product entity) => inner.GetKey(entity);
+    }
+
+    private static void ScopeBlind(IServiceCollection services) =>
+        services.AddScoped<TabTabGo.Core.Services.IBaseService<Product, int>>(sp =>
+            new ScopeBlindService(new TestProductService(sp.GetRequiredService<TabTabGo.Core.Data.IUnitOfWork>(),
+                sp.GetRequiredService<ILogger<TabTabGo.Core.Services.BaseService<Product, int>>>())));
+
+    [Fact]
+    public async Task Controller_PatchWithAServiceThatCannotEnforceTheScope_FailsClosed()
+    {
+        await using var app = await Start(services: ScopeBlind);
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"/name\",\"value\":\"leaked\"}]"), tenant: "A"), Ct);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        Assert.Equal("Product 02", fresh.Products.Find(2)!.Name);
+    }
+
+    [Fact]
+    public async Task MinimalApi_PatchWithAServiceThatCannotEnforceTheScope_FailsClosed()
+    {
+        await using var app = await TestApp.StartAsync(options: o => o.GetFixCriteria = p => p.Tenant == "A", services: ScopeBlind);
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2",
+            Json("[{\"op\":\"replace\",\"path\":\"/name\",\"value\":\"leaked\"}]", "application/json-patch+json")), Ct);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        Assert.Equal("Product 02", fresh.Products.Find(2)!.Name);
+    }
+
+    [Fact]
+    public async Task Controller_PatchWithAServiceThatCannotEnforceTheScope_NoScope_StillWorks()
+    {
+        await using var app = await Start(services: ScopeBlind);
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"/name\",\"value\":\"fine\"}]")), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Controller_PatchLoadedEntityDefinitelyOutsideTheScope_Is404WithoutCallingTheService()
+    {
+        // a service that returns an entity that does not satisfy the scope (a looser GetByKey) must still not be written
+        await using var app = await Start(services: s => s.AddScoped<TabTabGo.Core.Services.IBaseService<Product, int>>(sp =>
+            new ScopeBlindService(new TestProductService(sp.GetRequiredService<TabTabGo.Core.Data.IUnitOfWork>(),
+                sp.GetRequiredService<ILogger<TabTabGo.Core.Services.BaseService<Product, int>>>()), ignoreScopeOnGet: true)));
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/json/2",
+            Json("{\"name\":\"x\"}"), tenant: "B"), Ct); // product 2 is tenant A, scope asks for B
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/tenant")]
+    public async Task Controller_PatchOfAScopeDefiningProperty_IsRejectedByDefault(string path)
+    {
+        await using var app = await Start();
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"" + path + "\",\"value\":\"B\"}]"), tenant: "A"), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("PROTECTED_PROPERTY", (await Body(response)).GetProperty("code").GetString());
+        await using var fresh = app.Db.CreateContext();
+        Assert.Equal("A", fresh.Products.Find(2)!.Tenant);
+    }
+
+    [Fact]
+    public async Task Controller_PatchJsonOfAScopeDefiningProperty_IsRejectedByDefault()
+    {
+        await using var app = await Start();
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/json/2", Json("{\"tenant\":\"B\"}"), tenant: "A"), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Controller_PatchOfTheForeignKeyOfANavigationScope_IsRejectedByDefault()
+    {
+        await using var app = await Start();
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"/categoryId\",\"value\":99}]"), category: "Hardware"), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Controller_PatchOfAPropertyTheScopeDoesNotUse_StillWorks()
+    {
+        await using var app = await Start();
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/2",
+            Patch("[{\"op\":\"replace\",\"path\":\"/price\",\"value\":5}]"), tenant: "A"), Ct);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -634,7 +816,7 @@ public class EntityControllerBaseTests
     [Fact]
     public async Task Patch_ReplaceTenant_MovingOutOfScope_Is404AndNotPersisted()
     {
-        await using var app = await Start();
+        await using var app = await Start(services: ScopeMembersPatchable);
 
         var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/2",
             Patch("[{\"op\":\"replace\",\"path\":\"/tenant\",\"value\":\"B\"}]"), tenant: "A"), Ct);
@@ -662,7 +844,7 @@ public class EntityControllerBaseTests
     [Fact]
     public async Task PatchJson_ChangingTheTenant_IsRejectedAndNotPersisted()
     {
-        await using var app = await Start();
+        await using var app = await Start(services: ScopeMembersPatchable);
 
         var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/json/2", Json("{\"tenant\":\"B\"}"), tenant: "A"), Ct);
 

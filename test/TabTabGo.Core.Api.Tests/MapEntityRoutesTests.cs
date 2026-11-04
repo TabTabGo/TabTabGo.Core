@@ -623,7 +623,10 @@ public class MapEntityRoutesTests
     public async Task Patch_ReplaceTenant_MovingOutOfScope_Is404AndNotPersisted()
     {
         // the scope was checked before the patch but never after it, so a tenant could be moved to another tenant (R2)
-        await using var app = await TestApp.StartAsync(options: o => o.GetFixCriteria = p => p.Tenant == "A");
+        await using var app = await TestApp.StartAsync(options: o => o.GetFixCriteria = p => p.Tenant == "A",
+            services: s => s.AddScoped<TabTabGo.Core.Services.IBaseService<Product, int>>(sp =>
+                new TestProductService(sp.GetRequiredService<TabTabGo.Core.Data.IUnitOfWork>(),
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<TabTabGo.Core.Services.BaseService<Product, int>>>()) { ScopeMembersPatchable = true }));
 
         var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/products/2",
             Patch("[{\"op\":\"replace\",\"path\":\"/tenant\",\"value\":\"B\"}]")), Ct);

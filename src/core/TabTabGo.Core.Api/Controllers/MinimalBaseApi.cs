@@ -299,7 +299,7 @@ public static class SetupEntityRouters
 
             try
             {
-                service.EnsurePatchable(changes);
+                service.EnsurePatchable(changes, options.GetFixCriteria);
 
                 // looked up inside the scope: an entity outside the scope is a 404, as on GET
                 var entity = await service.GetByKey(id, fixCriteria: options.GetFixCriteria, cancellationToken: cancellationToken);
@@ -319,6 +319,12 @@ public static class SetupEntityRouters
 
                 // the operations add up in the entity's own bag: check the result, not each operation
                 service.EnsureExtraPropertiesWithinLimits(entity);
+
+                // second layer: a patch that is definitely outside the scope never reaches the service
+                if (ScopeCheck.IsDefinitelyOutside(options.GetFixCriteria, entity))
+                {
+                    return TypedResults.NotFound(ApiErrorResponses.NotFound(entityName, id, http));
+                }
 
                 var validationResult = validateService != null
                     ? await validateService.Validate(entity, cancellationToken)
