@@ -235,6 +235,39 @@ public class MinimalReadRepository : IGenericReadRepository<Product, int>
     }
 }
 
+/// <summary>Service over <see cref="Widget"/>.</summary>
+public class TestWidgetService(IUnitOfWork unitOfWork)
+    : BaseService<Widget, int>(unitOfWork, Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseService<Widget, int>>.Instance)
+{
+    public override Expression<Func<Widget, bool>> GetKeyPredicate(int id) => w => w.Id == id;
+
+    public override int GetKey(Widget entity) => entity.Id;
+}
+
+/// <summary>A product service that overrides the 3-argument UpdateChanges, as a business rule or an audit would.</summary>
+public class OverridingProductService(IUnitOfWork unitOfWork, ILogger<BaseService<Product, int>> logger) : TestProductService(unitOfWork, logger)
+{
+    public int OverrideCalls { get; private set; }
+
+    public override Task<Product> UpdateChanges(int id, Product entity, CancellationToken cancellationToken)
+    {
+        OverrideCalls++;
+        return base.UpdateChanges(id, entity, cancellationToken);
+    }
+}
+
+/// <summary>A product service that customises the update through the extension point, <c>UpdateChangesCore</c>.</summary>
+public class CoreOverridingProductService(IUnitOfWork unitOfWork, ILogger<BaseService<Product, int>> logger) : TestProductService(unitOfWork, logger)
+{
+    public int CoreCalls { get; private set; }
+
+    protected override Task<Product> UpdateChangesCore(int id, Product entity, Expression<Func<Product, bool>>? scope, CancellationToken cancellationToken)
+    {
+        CoreCalls++;
+        return base.UpdateChangesCore(id, entity, scope, cancellationToken);
+    }
+}
+
 /// <summary>Unit of work that implements only the 8.x members (the default interface methods fill the rest).</summary>
 public class MinimalUnitOfWork : IUnitOfWork
 {

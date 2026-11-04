@@ -701,6 +701,78 @@ public class ScopeAndBoundsTests : ServiceTestBase
         await Assert.ThrowsAsync<NotSupportedException>(() => port.Delete(new[] { 1 }, null, Ct));
     }
 
+    // --- F2: the extension point of the scoped update -----------------------------------------------------------------
+
+    [Fact]
+    public async Task UpdateChanges_Scoped_WhenTheThreeArgumentMethodIsOverridden_FailsClosedAndSaysWhatToOverride()
+    {
+        var service = new OverridingProductService(UnitOfWork, Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseService<Product, int>>.Instance);
+        var product = (await service.GetByKey(3, cancellationToken: Ct))!;
+        product.Name = "must not be saved";
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.UpdateChanges(3, product, p => p.Tenant == "B", Ct));
+
+        Assert.Equal("UPDATECHANGES_OVERRIDDEN", ex.ErrorCode);
+        Assert.Contains("UpdateChangesCore", ex.Message);
+        Assert.Equal(0, service.OverrideCalls);
+        await using var fresh = Db.CreateContext();
+        Assert.Equal("Product 03", fresh.Products.Find(3)!.Name);
+    }
+
+    [Fact]
+    public async Task UpdateChanges_Unscoped_WhenTheThreeArgumentMethodIsOverridden_RunsTheOverride()
+    {
+        var service = new OverridingProductService(UnitOfWork, Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseService<Product, int>>.Instance);
+        var product = (await service.GetByKey(3, cancellationToken: Ct))!;
+        product.Name = "unscoped";
+
+        await service.UpdateChanges(3, product, Ct);
+        await service.UpdateChanges(3, product, (Expression<Func<Product, bool>>?)null, Ct);
+
+        Assert.Equal(2, service.OverrideCalls);
+    }
+
+    [Fact]
+    public async Task UpdateChangesCore_Override_RunsForTheScopedAndTheUnscopedUpdate()
+    {
+        var service = new CoreOverridingProductService(UnitOfWork, Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseService<Product, int>>.Instance);
+        var product = (await service.GetByKey(3, cancellationToken: Ct))!;
+        product.Name = "core";
+
+        await service.UpdateChanges(3, product, Ct);
+        await service.UpdateChanges(3, product, p => p.Tenant == "B", Ct);
+
+        Assert.Equal(2, service.CoreCalls);
+    }
+
+    // --- F5: scopes written over an interface ------------------------------------------------------------------------
+
+    private static Expression<Func<Product, bool>> CastScope => p => ((ITenanted)p).Tenant == "A";
+
+    private static Expression<Func<Product, bool>> AsScope => p => (p as ITenanted)!.Tenant == "A";
+
+    [Fact]
+    public void EnsurePatchable_ScopeOverAnInterfaceCast_ProtectsTheMember()
+    {
+        Assert.Throws<ApiException>(() => Service.EnsurePatchable(PatchOf("/tenant"), CastScope));
+        Assert.Throws<ApiException>(() => Service.EnsurePatchable(PatchOf("/tenant"), AsScope));
+        Service.EnsurePatchable(PatchOf("/name"), CastScope);
+    }
+
+    [Fact]
+    public async Task UpdateChanges_ScopeOverAnInterfaceCast_IsCheckedInTheDatabase()
+    {
+        Service.ScopeMembersPatchable = true;
+        var product = (await Service.GetByKey(2, cancellationToken: Ct))!; // tenant A
+        product.Tenant = "B";
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => Service.UpdateChanges(2, product, CastScope, Ct));
+
+        Assert.Equal(HttpStatusCode.NotFound, ex.HttpStatusCode);
+        await using var fresh = Db.CreateContext();
+        Assert.Equal("A", fresh.Products.Find(2)!.Tenant);
+    }
+
     // --- fail closed on scope --------------------------------------------------------------------------------------
 
     [Fact]

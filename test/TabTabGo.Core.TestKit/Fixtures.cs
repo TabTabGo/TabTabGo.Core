@@ -28,6 +28,22 @@ public sealed class SqliteFixture : IDisposable
 
     public SqliteConnection Connection => _connection;
 
+    /// <summary>Runs between a failed attempt and its retry (a concurrent writer committing in that window).</summary>
+    public Action? OnRetry { get; set; }
+
+    /// <summary>Gives modified widgets a new concurrency token on save.</summary>
+    public bool BumpVersion { get; set; }
+
+    /// <summary>Adds one widget (tenant A, with a note, a token and a shadow column) and returns nothing; its id is 1.</summary>
+    public void SeedWidget()
+    {
+        using var context = CreateContext();
+        var widget = new Widget { Name = "w1", Tenant = "A", Note = "orig", Version = Guid.NewGuid() };
+        context.Widgets.Add(widget);
+        context.Entry(widget).Property("Region").CurrentValue = "EU";
+        context.SaveChanges();
+    }
+
     /// <summary>Interceptors added to every context this fixture creates (set before the first use).</summary>
     public List<Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor> DefaultInterceptors { get; } = new();
 
@@ -38,7 +54,7 @@ public sealed class SqliteFixture : IDisposable
             {
                 if (_retrying)
                 {
-                    o.ExecutionStrategy(d => new RetryingStrategy(d));
+                    o.ExecutionStrategy(d => new RetryingStrategy(d, () => OnRetry?.Invoke()));
                 }
             });
         var all = DefaultInterceptors.Concat(interceptors).ToArray();
@@ -47,7 +63,7 @@ public sealed class SqliteFixture : IDisposable
             builder.AddInterceptors(all);
         }
 
-        return new TestDbContext(builder.Options);
+        return new TestDbContext(builder.Options) { BumpVersion = BumpVersion };
     }
 
     /// <summary>Adds a few products, categories and lines.</summary>

@@ -41,11 +41,22 @@ internal static class ScopeMemberFinder
     private static bool IsNavigation(Type type) =>
         type != typeof(string) && !type.IsValueType && !type.IsArray;
 
+    // ((ITenant)p).Tenant and (p as ITenant).Tenant read the same member of p
+    private static Expression? Unwrap(Expression? expression)
+    {
+        while (expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked or ExpressionType.TypeAs } unary)
+        {
+            expression = unary.Operand;
+        }
+
+        return expression;
+    }
+
     private sealed class Visitor(ParameterExpression parameter, HashSet<string> members) : ExpressionVisitor
     {
         protected override Expression VisitMember(MemberExpression node)
         {
-            if (node.Expression == parameter)
+            if (Unwrap(node.Expression) == parameter)
             {
                 members.Add(node.Member.Name);
             }
@@ -56,7 +67,7 @@ internal static class ScopeMemberFinder
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
             // EF.Property(p, "Name")
-            if (node.Method.Name == "Property" && node.Arguments.Count == 2 && node.Arguments[0] == parameter
+            if (node.Method.Name == "Property" && node.Arguments.Count == 2 && Unwrap(node.Arguments[0]) == parameter
                 && node.Arguments[1] is ConstantExpression { Value: string name })
             {
                 members.Add(name);

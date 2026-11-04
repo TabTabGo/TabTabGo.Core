@@ -13,6 +13,24 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
 
     public DbSet<Category> Categories => Set<Category>();
 
+    public DbSet<Widget> Widgets => Set<Widget>();
+
+    /// <summary>Gives a modified <see cref="Widget"/> a new concurrency token on save, as a rowversion column does.</summary>
+    public bool BumpVersion { get; set; }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        if (BumpVersion)
+        {
+            foreach (var entry in ChangeTracker.Entries<Widget>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Entity.Version = Guid.NewGuid();
+            }
+        }
+
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     public DbSet<OrderLine> OrderLines => Set<OrderLine>();
 
     public DbSet<CompositeKeyEntity> Composites => Set<CompositeKeyEntity>();
@@ -32,6 +50,12 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
             b.HasKey(p => p.Id);
             b.EntityBuilder();
             b.HasMany(p => p.Lines).WithOne().HasForeignKey(l => l.ProductId);
+        });
+        modelBuilder.Entity<Widget>(b =>
+        {
+            b.HasKey(w => w.Id);
+            b.EntityBuilder();
+            b.Property<string>("Region");
         });
         modelBuilder.Entity<Category>(b =>
         {
@@ -136,8 +160,14 @@ public sealed class FailOnceAfterWrite : Microsoft.EntityFrameworkCore.Diagnosti
 public sealed class TransientTestException() : Exception("transient");
 
 /// <summary>A retrying execution strategy for tests (retries <see cref="TransientTestException"/> immediately, up to 3 times).</summary>
-public sealed class RetryingStrategy(Microsoft.EntityFrameworkCore.Storage.ExecutionStrategyDependencies dependencies)
+public sealed class RetryingStrategy(Microsoft.EntityFrameworkCore.Storage.ExecutionStrategyDependencies dependencies, Action? onRetry = null)
     : Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy(dependencies, 3, TimeSpan.Zero)
 {
+    protected override void OnRetry()
+    {
+        onRetry?.Invoke();
+        base.OnRetry();
+    }
+
     protected override bool ShouldRetryOn(Exception exception) => exception is TransientTestException;
 }

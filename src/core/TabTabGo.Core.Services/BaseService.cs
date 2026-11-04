@@ -379,7 +379,8 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     }
 
     /// <summary>
-    /// Update entity after process patch json on entity object
+    /// Update entity after process patch json on entity object. A thin wrapper: <see cref="UpdateChangesCore"/> does the work and
+    /// is the extension point (override that, not this method: the scoped overload runs only the core, inside a transaction).
     /// </summary>
     /// <param name="id">entity identifier</param>
     /// <param name="entity">updated object</param>
@@ -401,20 +402,92 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             return await UpdateChanges(id, entity, cancellationToken);
         }
 
+        // The scoped path runs UpdateChangesCore, never the 3-argument method, so an override of that method would be skipped
+        // silently (its business rule or audit would not run). Fail closed and say where the extension point is.
+        if (OverridesUpdateChanges(GetType()))
+        {
+            throw new ApiException(
+                $"{GetType().Name} overrides UpdateChanges(id, entity, cancellationToken), which the scoped update does not call. " +
+                "Override UpdateChangesCore instead; nothing was updated.",
+                statusCode: HttpStatusCode.InternalServerError, code: "UPDATECHANGES_OVERRIDDEN");
+        }
+
         // Save inside a transaction, ask the database whether the entity is still in scope (foreign keys and
         // navigations count there) and roll everything back when it is not. The unit of work runs the whole unit
         // through the provider's execution strategy, so retrying strategies (SQL Server, Npgsql) work too.
         // PostUpdate runs after the commit: a side effect must not fire for a change that can still be rolled back.
+        // A retry starts from the database: the entity is reloaded inside the scope and only the properties the patch changed
+        // are applied to it (see ReapplyAsync), so a rolled-back concurrency token or a concurrent writer's columns are not lost.
+        var patched = SnapshotPatch(entity);
+        var attempt = 0;
         var updated = await _unitOfWork.ExecuteInTransactionAsync(
-            ct => UpdateChangesCore(id, entity, scope, ct), cancellationToken);
+            ct => attempt++ == 0 ? UpdateChangesCore(id, entity, scope, ct) : ReapplyAsync(id, entity, patched, scope, ct),
+            cancellationToken);
         await PostUpdate(updated, cancellationToken);
         return updated;
     }
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> UpdateChangesOverrides = new();
+
+    private static bool OverridesUpdateChanges(Type serviceType) =>
+        UpdateChangesOverrides.GetOrAdd(serviceType, type => type.GetMethod(nameof(UpdateChanges),
+            new[] { typeof(TKey), typeof(TEntity), typeof(CancellationToken) })?.DeclaringType != typeof(BaseService<TEntity, TKey>));
+
+    // the properties the patch changed on the tracked entity: name and new value
+    private Dictionary<string, object?> SnapshotPatch(TEntity entity)
+    {
+        var change = _unitOfWork.GetChanges().FirstOrDefault(c => ReferenceEquals(c.Entity, entity));
+        var changed = new Dictionary<string, object?>();
+        if (change == null)
+        {
+            return changed;
+        }
+
+        foreach (var (name, value) in change.CurrentValues)
+        {
+            if (!change.OriginalValues.TryGetValue(name, out var original) || !Equals(original, value))
+            {
+                changed[name] = value;
+            }
+        }
+
+        return changed;
+    }
+
+    private async Task<TEntity> ReapplyAsync(TKey id, TEntity entity, Dictionary<string, object?> patched,
+        Expression<Func<TEntity, bool>> scope, CancellationToken cancellationToken)
+    {
+        var current = await LoadRequiredAsync(id, scope, cancellationToken);
+        foreach (var (name, value) in patched)
+        {
+            var property = typeof(TEntity).GetProperty(name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            if (property is { CanWrite: true })
+            {
+                property.SetValue(current, value);
+            }
+        }
+
+        if (!IsValidToUpdate(current, out var errorMessage))
+            throw new ApiException($"Failed to Update {typeof(TEntity).Name} '{id}'. {errorMessage}.", errorNumber: 4002, statusCode: HttpStatusCode.BadRequest);
+        await PreUpdate(current, entity, cancellationToken);
+
+        // no repository Update here: it would mark every column modified and overwrite what a concurrent writer committed in
+        // the meantime; the tracker sees exactly the properties that were set above
+        await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
+        if (!await StillInScopeAsync(id, scope, cancellationToken))
+            throw NotFound(id);
+        return current;
+    }
+
     /// <summary>
     /// The update without <c>PostUpdate</c>: load, validate, <c>PreUpdate</c>, save and, when a scope is
-    /// given, check in the database that the entity is still inside it.
+    /// given, check in the database that the entity is still inside it. This is the extension point of the update: both
+    /// <c>UpdateChanges</c> overloads run it. It may run again after a transient failure, on a fresh load (see the remarks).
     /// </summary>
+    /// <remarks>
+    /// Under a retrying execution strategy a failed attempt is rolled back and the scoped update continues on a reload of the
+    /// entity with only the properties the patch changed; <c>PreUpdate</c> and <c>IsValidToUpdate</c> run again, so keep them repeatable.
+    /// </remarks>
     /// <param name="id">Entity identifier</param>
     /// <param name="entity">Updated object</param>
     /// <param name="scope">Scope the entity must still satisfy after the save, or null</param>

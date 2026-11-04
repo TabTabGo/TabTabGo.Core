@@ -3,7 +3,7 @@ using TabTabGo.Core.Entities;
 namespace TabTabGo.Core.TestKit;
 
 /// <summary>Test entity with an integer key, a tenant for scope tests and a navigation to a category.</summary>
-public class Product : Entity
+public class Product : Entity, ITenanted
 {
     public int Id { get; set; }
 
@@ -37,6 +37,28 @@ public class Product : Entity
     public Category? Category { get; set; }
 
     public List<OrderLine> Lines { get; set; } = new();
+}
+
+/// <summary>Something that belongs to a tenant; scopes are sometimes written over the interface.</summary>
+public interface ITenanted
+{
+    string Tenant { get; }
+}
+
+/// <summary>Entity with a concurrency token and a shadow column, for retry tests.</summary>
+public class Widget : Entity
+{
+    public int Id { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public string Tenant { get; set; } = "A";
+
+    public string? Note { get; set; }
+
+    /// <summary>Changed on every update (see <c>TestDbContext.BumpVersion</c>) and checked by the database on the update.</summary>
+    [System.ComponentModel.DataAnnotations.ConcurrencyCheck]
+    public Guid Version { get; set; }
 }
 
 /// <summary>Test aggregate parent.</summary>
