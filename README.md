@@ -169,6 +169,19 @@ compares the text of the elements: `column.exist('//*[text() = sql:variable("@p0
   * **Bulk keys.** `CountByKeys` and bulk delete build the store's primary-key `IN` list (a query parameter, not inlined);
     composite keys fall back to one `GetKeyPredicate` per key. Override `PreferServiceKeyPredicate` when your service's
     `GetKeyPredicate` is not "primary key equals key".
+  * **Deletes are scoped in the query.** `DELETE {id}` and the bulk delete call `Delete(id, scope, ct)`, `CanDelete(id, scope, ct)`,
+    `Delete(keys, scope, ct)` and `CanDelete(keys, scope, ct)`, which load the key together with the scope: a key that two scopes
+    share (a code that is unique per tenant only) can no longer reach the other scope's row. For several keys every key must
+    resolve to at least one row inside the scope (`GetKey(entity)` is the key the service reports for a row), otherwise 404 and
+    nothing is deleted. A service that cannot enforce a scope (the interface defaults) answers 500 `SCOPE_NOT_ENFORCED`.
+    The overloads without a scope are unchanged.
+  * **Extending the update.** Override `UpdateChangesCore(id, entity, scope, ct)`, not `UpdateChanges(id, entity, ct)`: both
+    `UpdateChanges` overloads run the core (the 3-argument one is a thin wrapper). A scoped update on a service that overrides
+    the 3-argument method answers 500 `UPDATECHANGES_OVERRIDDEN` instead of silently skipping the override.
+  * **Retries.** Under a retrying execution strategy a failed attempt is rolled back, the tracker is cleared, and the retry
+    reloads the entity inside the scope and applies only the properties the patch changed (no re-attached old object, no
+    re-sent concurrency token, no overwrite of a concurrent writer's other columns). `PreUpdate` and `IsValidToUpdate`
+    run again on the retry, so keep them repeatable.
   * **Filters are bounded.** `$filter` longer than 4 096 characters or nested deeper than 32 levels answers 400.
 * **Bulk delete** (`EntityControllerBase.DeleteEntities`) accepts at most 500 ids (400 `TOO_MANY_IDS`), looks them up with one
   `IN` list, and checks the scope with one count query.
