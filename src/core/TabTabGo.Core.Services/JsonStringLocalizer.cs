@@ -295,6 +295,11 @@ public partial class JsonStringLocalizer : IStringLocalizer, ICultureStringLocal
 
     private static Assembly? TryLoad(string assemblyName)
     {
+        if (string.IsNullOrWhiteSpace(assemblyName))
+        {
+            return null;
+        }
+
         try
         {
             return Assembly.Load(new AssemblyName(assemblyName));

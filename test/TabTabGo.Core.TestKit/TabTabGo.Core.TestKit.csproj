@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Shared fakes and fixtures for the test projects; never packed. -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.Testing" />
+    <PackageReference Include="Microsoft.AspNetCore.OData" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\core\TabTabGo.Core\TabTabGo.Core.csproj" />
+    <ProjectReference Include="..\..\src\core\TabTabGo.Core.Services\TabTabGo.Core.Services.csproj" />
+    <ProjectReference Include="..\..\src\core\TabTabGo.Core.Api\TabTabGo.Core.Api.csproj" />
+    <ProjectReference Include="..\..\src\data\TabTabGo.Data.EF\TabTabGo.Data.EF.csproj" />
+  </ItemGroup>
+
+</Project>

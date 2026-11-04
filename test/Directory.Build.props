@@ -7,7 +7,7 @@
     <IsTestProject>true</IsTestProject>
     <OutputType>Exe</OutputType>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <NoWarn>$(NoWarn);CS1591;xUnit1051</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

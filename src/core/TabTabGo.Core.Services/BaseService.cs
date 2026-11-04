@@ -285,6 +285,8 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        if (!EqualityComparer<TKey>.Default.Equals(GetKey(entity), id))
+            throw new ApiException($"Failed to Update {typeof(TEntity).Name} '{id}'. The key in the body does not match the key in the route.", errorNumber: 4003, statusCode: HttpStatusCode.BadRequest);
         var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
         var current = await LoadRequiredAsync(id, cancellationToken, includeProperties);
         if (!IsValidToUpdate(entity, out var errorMessage))

@@ -158,6 +158,11 @@ internal static class ODataFilterTokenizer
         private Node ParseAtom()
         {
             SkipWhitespace();
+            if (NextWordIs("and") || NextWordIs("or"))
+            {
+                throw Invalid($"Expected a condition at position {_position}.");
+            }
+
             var start = _position;
             var depth = 0;
             while (_position < text.Length)
@@ -298,8 +303,8 @@ internal static class ODataFilterTokenizer
             }
 
             return string.Compare(text, i, word, 0, word.Length, StringComparison.OrdinalIgnoreCase) == 0
-                   && i + word.Length < text.Length
-                   && (char.IsWhiteSpace(text[i + word.Length]) || text[i + word.Length] == '(');
+                   && (i + word.Length == text.Length
+                       || char.IsWhiteSpace(text[i + word.Length]) || text[i + word.Length] == '(');
         }
 
         private bool TryConsumeKeyword(string word)

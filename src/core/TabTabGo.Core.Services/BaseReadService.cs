@@ -717,10 +717,27 @@ public abstract partial class BaseReadService<TEntity, TKey> : IBaseReadService<
         var result = await GetCustomViewModels(mapper, query, fixCriteria, includeProperties,
             cancellationToken);
         columns ??= GetColumns();
+        // a row can only be added to the table it was created from, so the table needs the columns first
+        foreach (var column in columns)
+        {
+            if (!dbResult.Columns.Contains(column.ColumnName))
+            {
+                dbResult.Columns.Add(column.ColumnName, column.DataType);
+            }
+        }
+
         if (getDataRow == null) return dbResult;
         foreach (var item in result.Items)
         {
-            dbResult.Rows.Add(getDataRow(item, columns));
+            var row = getDataRow(item, columns);
+            if (ReferenceEquals(row.Table, dbResult))
+            {
+                dbResult.Rows.Add(row);
+            }
+            else
+            {
+                dbResult.LoadDataRow(row.ItemArray, true);
+            }
         }
 
         return dbResult;

@@ -1,0 +1,64 @@
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+
+namespace TabTabGo.Core.TestKit;
+
+/// <summary>
+/// A private in-memory SQLite database for one test class instance. The connection stays open for the life of the
+/// fixture, so every context created from it sees the same data.
+/// </summary>
+public sealed class SqliteFixture : IDisposable
+{
+    private readonly SqliteConnection _connection;
+
+    public SqliteFixture()
+    {
+        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection.Open();
+        using var context = CreateContext();
+        context.Database.EnsureCreated();
+    }
+
+    public SqliteConnection Connection => _connection;
+
+    public TestDbContext CreateContext(bool logSql = false)
+    {
+        var builder = new DbContextOptionsBuilder<TestDbContext>().UseSqlite(_connection);
+        return new TestDbContext(builder.Options);
+    }
+
+    /// <summary>Adds a few products, categories and lines.</summary>
+    public void Seed()
+    {
+        using var context = CreateContext();
+        var category = new Category { Name = "Hardware" };
+        context.Categories.Add(category);
+        context.SaveChanges();
+        for (var i = 1; i <= 25; i++)
+        {
+            context.Products.Add(new Product
+            {
+                Name = $"Product {i:00}",
+                Price = i * 10,
+                Tenant = i % 2 == 0 ? "A" : "B",
+                CategoryId = category.Id,
+            });
+        }
+
+        context.SaveChanges();
+    }
+
+    public void Dispose() => _connection.Dispose();
+}
+
+/// <summary>A private EF InMemory database for tests that do not need SQL.</summary>
+public sealed class InMemoryFixture
+{
+    private readonly string _name = Guid.NewGuid().ToString();
+
+    public TestDbContext CreateContext()
+    {
+        var builder = new DbContextOptionsBuilder<TestDbContext>().UseInMemoryDatabase(_name);
+        return new TestDbContext(builder.Options);
+    }
+}
