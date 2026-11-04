@@ -61,6 +61,36 @@ public class Widget : Entity
     public Guid Version { get; set; }
 }
 
+/// <summary>Owned value of <see cref="Gadget"/>.</summary>
+public class GadgetAddress
+{
+    public string City { get; set; } = string.Empty;
+}
+
+/// <summary>Dependent row of <see cref="Gadget"/>.</summary>
+public class GadgetLine
+{
+    public int Id { get; set; }
+
+    public int GadgetId { get; set; }
+
+    public string Text { get; set; } = string.Empty;
+}
+
+/// <summary>Entity with an owned type and a collection, for the retry tests that must fail closed.</summary>
+public class Gadget : Entity
+{
+    public int Id { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public string Tenant { get; set; } = "A";
+
+    public GadgetAddress Address { get; set; } = new();
+
+    public List<GadgetLine> Lines { get; set; } = new();
+}
+
 /// <summary>Test aggregate parent.</summary>
 public class Category : Entity
 {

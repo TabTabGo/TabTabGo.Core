@@ -44,6 +44,14 @@ public sealed class SqliteFixture : IDisposable
         context.SaveChanges();
     }
 
+    /// <summary>Adds one gadget (tenant A, owned address "old", no lines); its id is 1.</summary>
+    public void SeedGadget()
+    {
+        using var context = CreateContext();
+        context.Gadgets.Add(new Gadget { Name = "g", Address = new GadgetAddress { City = "old" } });
+        context.SaveChanges();
+    }
+
     /// <summary>Interceptors added to every context this fixture creates (set before the first use).</summary>
     public List<Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor> DefaultInterceptors { get; } = new();
 

@@ -244,6 +244,17 @@ public class TestWidgetService(IUnitOfWork unitOfWork)
     public override int GetKey(Widget entity) => entity.Id;
 }
 
+/// <summary>Service over <see cref="Gadget"/>.</summary>
+public class TestGadgetService(IUnitOfWork unitOfWork)
+    : BaseService<Gadget, int>(unitOfWork, Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseService<Gadget, int>>.Instance)
+{
+    public override Expression<Func<Gadget, bool>> GetKeyPredicate(int id) => g => g.Id == id;
+
+    public override int GetKey(Gadget entity) => entity.Id;
+
+    protected override string[] IncludeProperties => new[] { nameof(Gadget.Lines) };
+}
+
 /// <summary>A product service that overrides the 3-argument UpdateChanges, as a business rule or an audit would.</summary>
 public class OverridingProductService(IUnitOfWork unitOfWork, ILogger<BaseService<Product, int>> logger) : TestProductService(unitOfWork, logger)
 {

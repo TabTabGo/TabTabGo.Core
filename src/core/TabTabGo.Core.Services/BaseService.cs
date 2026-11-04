@@ -418,10 +418,10 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         // PostUpdate runs after the commit: a side effect must not fire for a change that can still be rolled back.
         // A retry starts from the database: the entity is reloaded inside the scope and only the properties the patch changed
         // are applied to it (see ReapplyAsync), so a rolled-back concurrency token or a concurrent writer's columns are not lost.
-        var patched = SnapshotPatch(entity);
+        var (patched, replayable) = SnapshotPatch(entity);
         var attempt = 0;
         var updated = await _unitOfWork.ExecuteInTransactionAsync(
-            ct => attempt++ == 0 ? UpdateChangesCore(id, entity, scope, ct) : ReapplyAsync(id, entity, patched, scope, ct),
+            ct => attempt++ == 0 ? UpdateChangesCore(id, entity, scope, ct) : ReapplyAsync(id, patched, replayable, scope, ct),
             cancellationToken);
         await PostUpdate(updated, cancellationToken);
         return updated;
@@ -433,30 +433,50 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         UpdateChangesOverrides.GetOrAdd(serviceType, type => type.GetMethod(nameof(UpdateChanges),
             new[] { typeof(TKey), typeof(TEntity), typeof(CancellationToken) })?.DeclaringType != typeof(BaseService<TEntity, TKey>));
 
-    // the properties the patch changed on the tracked entity: name and new value
-    private Dictionary<string, object?> SnapshotPatch(TEntity entity)
+    // The properties the patch changed on the tracked entity (name and new value) and whether a retry can replay the whole
+    // change from them. Anything else in the tracker (owned or dependent entries, added or deleted rows, collection changes) or a
+    // changed property without a CLR setter (shadow) would be lost when the tracker is cleared for the retry, so the change is
+    // marked not replayable and the retry fails closed instead of committing a smaller change than the first attempt.
+    private (Dictionary<string, object?> Values, bool Replayable) SnapshotPatch(TEntity entity)
     {
-        var change = _unitOfWork.GetChanges().FirstOrDefault(c => ReferenceEquals(c.Entity, entity));
+        var changes = _unitOfWork.GetChanges();
         var changed = new Dictionary<string, object?>();
+        var replayable = changes.All(c => ReferenceEquals(c.Entity, entity) && c.State == "Modified");
+        var change = changes.FirstOrDefault(c => ReferenceEquals(c.Entity, entity));
         if (change == null)
         {
-            return changed;
+            return (changed, replayable);
         }
 
         foreach (var (name, value) in change.CurrentValues)
         {
-            if (!change.OriginalValues.TryGetValue(name, out var original) || !Equals(original, value))
+            if (change.OriginalValues.TryGetValue(name, out var original) && Equals(original, value))
             {
-                changed[name] = value;
+                continue;
+            }
+
+            changed[name] = value;
+            if (typeof(TEntity).GetProperty(name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance) is not { CanWrite: true })
+            {
+                replayable = false;
             }
         }
 
-        return changed;
+        return (changed, replayable);
     }
 
-    private async Task<TEntity> ReapplyAsync(TKey id, TEntity entity, Dictionary<string, object?> patched,
+    private async Task<TEntity> ReapplyAsync(TKey id, Dictionary<string, object?> patched, bool replayable,
         Expression<Func<TEntity, bool>> scope, CancellationToken cancellationToken)
     {
+        if (!replayable)
+        {
+            // never report done what was not done: the first attempt failed and was rolled back, and this change (owned or child
+            // rows, collections, shadow properties) cannot be rebuilt from the property values alone
+            throw new ApiException(
+                "A transient failure interrupted the update and it was NOT applied. Send the request again.",
+                statusCode: HttpStatusCode.ServiceUnavailable, code: "RETRY_NOT_REPLAYABLE");
+        }
+
         var current = await LoadRequiredAsync(id, scope, cancellationToken);
         foreach (var (name, value) in patched)
         {

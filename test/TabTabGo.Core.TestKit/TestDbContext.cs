@@ -15,6 +15,8 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
 
     public DbSet<Widget> Widgets => Set<Widget>();
 
+    public DbSet<Gadget> Gadgets => Set<Gadget>();
+
     /// <summary>Gives a modified <see cref="Widget"/> a new concurrency token on save, as a rowversion column does.</summary>
     public bool BumpVersion { get; set; }
 
@@ -50,6 +52,13 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
             b.HasKey(p => p.Id);
             b.EntityBuilder();
             b.HasMany(p => p.Lines).WithOne().HasForeignKey(l => l.ProductId);
+        });
+        modelBuilder.Entity<Gadget>(b =>
+        {
+            b.HasKey(g => g.Id);
+            b.EntityBuilder();
+            b.OwnsOne(g => g.Address);
+            b.HasMany(g => g.Lines).WithOne().HasForeignKey(l => l.GadgetId);
         });
         modelBuilder.Entity<Widget>(b =>
         {

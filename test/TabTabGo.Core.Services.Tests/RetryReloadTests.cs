@@ -140,4 +140,80 @@ public class RetryReloadTests : IDisposable
 
         Assert.Equal("w1", Stored().Name);
     }
+
+    // --- a change a retry cannot rebuild from property values fails closed ---
+
+    [Fact]
+    public async Task UpdateChanges_Scoped_OwnedAndAddedChildChangeWithARetry_FailsClosedAndPersistsNothing()
+    {
+        _db.SeedGadget();
+        var failure = new FailOnceAfterWrite();
+        _db.DefaultInterceptors.Add(failure);
+        using var context = _db.CreateContext();
+        var service = new TestGadgetService(new TestUnitOfWork(context));
+        var gadget = (await service.GetByKey(1, cancellationToken: Ct))!;
+        gadget.Name = "patched";
+        gadget.Address.City = "new";
+        gadget.Lines.Add(new GadgetLine { Text = "added" });
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.UpdateChanges(1, gadget, g => g.Tenant == "A", Ct));
+
+        Assert.Equal("RETRY_NOT_REPLAYABLE", ex.ErrorCode);
+        Assert.Equal(System.Net.HttpStatusCode.ServiceUnavailable, ex.HttpStatusCode);
+        Assert.Equal(1, failure.Failures);
+        using var fresh = _db.CreateContext();
+        var stored = fresh.Gadgets.Include(g => g.Lines).AsNoTracking().Single();
+        Assert.Equal("g", stored.Name);
+        Assert.Equal("old", stored.Address.City);
+        Assert.Empty(stored.Lines);
+    }
+
+    [Fact]
+    public async Task UpdateChanges_Scoped_OwnedAndAddedChildChangeWithoutAFailure_IsFullyApplied()
+    {
+        _db.SeedGadget();
+        using var context = _db.CreateContext();
+        var service = new TestGadgetService(new TestUnitOfWork(context));
+        var gadget = (await service.GetByKey(1, cancellationToken: Ct))!;
+        gadget.Name = "patched";
+        gadget.Address.City = "new";
+        gadget.Lines.Add(new GadgetLine { Text = "added" });
+
+        await service.UpdateChanges(1, gadget, g => g.Tenant == "A", Ct);
+
+        using var fresh = _db.CreateContext();
+        var stored = fresh.Gadgets.Include(g => g.Lines).AsNoTracking().Single();
+        Assert.Equal("new", stored.Address.City);
+        Assert.Single(stored.Lines);
+    }
+
+    [Fact]
+    public async Task UpdateChanges_Scoped_ShadowPropertyChangeWithARetry_FailsClosed()
+    {
+        var (_, service, context) = Start();
+        using var _ = context;
+        var widget = (await service.GetByKey(1, cancellationToken: Ct))!;
+        widget.Name = "patched";
+        context.Entry(widget).Property("Region").CurrentValue = "US"; // no CLR property to set on a reload
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.UpdateChanges(1, widget, ScopeA, Ct));
+
+        Assert.Equal("RETRY_NOT_REPLAYABLE", ex.ErrorCode);
+        Assert.Equal("w1", Stored().Name);
+    }
+
+    [Fact]
+    public async Task UpdateChanges_Scoped_AnotherChangedEntityInTheTrackerWithARetry_FailsClosed()
+    {
+        var (_, service, context) = Start();
+        using var _ = context;
+        var widget = (await service.GetByKey(1, cancellationToken: Ct))!;
+        widget.Name = "patched";
+        context.Widgets.Add(new Widget { Name = "side effect", Version = Guid.NewGuid() });
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.UpdateChanges(1, widget, ScopeA, Ct));
+
+        Assert.Equal("RETRY_NOT_REPLAYABLE", ex.ErrorCode);
+        Assert.Equal(1, _db.CreateContext().Widgets.Count());
+    }
 }
