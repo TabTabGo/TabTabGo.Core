@@ -261,9 +261,13 @@ public class CoreOverridingProductService(IUnitOfWork unitOfWork, ILogger<BaseSe
 {
     public int CoreCalls { get; private set; }
 
+    /// <summary>Runs first in every attempt with the attempt number (1-based); throw to reject the update.</summary>
+    public Action<int>? Rule { get; set; }
+
     protected override Task<Product> UpdateChangesCore(int id, Product entity, Expression<Func<Product, bool>>? scope, CancellationToken cancellationToken)
     {
         CoreCalls++;
+        Rule?.Invoke(CoreCalls);
         return base.UpdateChangesCore(id, entity, scope, cancellationToken);
     }
 }

@@ -123,4 +123,51 @@ public class RetryingStrategyTests() : ServiceTestBase(seed: true, retrying: tru
         Assert.NotEqual(otherCategory, stored.CategoryId);
         Assert.DoesNotContain("PostUpdate", typed.Calls);
     }
+
+    private (FailOnceAfterWrite Failure, CoreOverridingProductService Service) OverridingServiceWithFailureBeforeCommit()
+    {
+        var failure = new FailOnceAfterWrite();
+        Db.DefaultInterceptors.Add(failure);
+        var service = new CoreOverridingProductService(new TestUnitOfWork(Db.CreateContext()),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Services.BaseService<Product, int>>.Instance);
+        return (failure, service);
+    }
+
+    [Fact]
+    public async Task UpdateChanges_Scoped_AnUpdateChangesCoreOverrideRunsOnEveryAttempt()
+    {
+        var (failure, service) = OverridingServiceWithFailureBeforeCommit();
+        var product = (await service.GetByKey(6, cancellationToken: Ct))!;
+        product.Name = "override each attempt";
+
+        await service.UpdateChanges(6, product, HardwareScope, Ct);
+
+        Assert.Equal(1, failure.Failures);
+        Assert.Equal(2, service.CoreCalls); // the retry used to skip the override
+        await using var fresh = Db.CreateContext();
+        Assert.Equal("override each attempt", fresh.Products.Find(6)!.Name);
+    }
+
+    [Fact]
+    public async Task UpdateChanges_Scoped_AViolationRaisedByTheOverrideOnTheRetry_RejectsAndPersistsNothing()
+    {
+        var (failure, service) = OverridingServiceWithFailureBeforeCommit();
+        service.Rule = attempt =>
+        {
+            if (attempt == 2)
+            {
+                throw new ApiException("rule violated on the retry", statusCode: HttpStatusCode.Forbidden);
+            }
+        };
+        var product = (await service.GetByKey(6, cancellationToken: Ct))!;
+        product.Name = "must not persist";
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.UpdateChanges(6, product, HardwareScope, Ct));
+
+        Assert.Equal(HttpStatusCode.Forbidden, ex.HttpStatusCode);
+        Assert.Equal(1, failure.Failures);
+        await using var fresh = Db.CreateContext();
+        Assert.Equal("Product 06", fresh.Products.Find(6)!.Name);
+        Assert.DoesNotContain("PostUpdate", service.Calls);
+    }
 }

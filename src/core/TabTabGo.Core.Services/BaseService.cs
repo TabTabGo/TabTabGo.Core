@@ -467,16 +467,10 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             }
         }
 
-        if (!IsValidToUpdate(current, out var errorMessage))
-            throw new ApiException($"Failed to Update {typeof(TEntity).Name} '{id}'. {errorMessage}.", errorNumber: 4002, statusCode: HttpStatusCode.BadRequest);
-        await PreUpdate(current, entity, cancellationToken);
-
-        // no repository Update here: it would mark every column modified and overwrite what a concurrent writer committed in
-        // the meantime; the tracker sees exactly the properties that were set above
-        await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
-        if (!await StillInScopeAsync(id, scope, cancellationToken))
-            throw NotFound(id);
-        return current;
+        // the retry goes through the same virtual extension point as the first attempt, so an override (business rule,
+        // authorisation, audit) runs on every attempt; the fresh load is CurrentEntity, which the core then uses
+        CurrentEntity = current;
+        return await UpdateChangesCore(id, current, scope, cancellationToken);
     }
 
     /// <summary>
@@ -486,7 +480,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// </summary>
     /// <remarks>
     /// Under a retrying execution strategy a failed attempt is rolled back and the scoped update continues on a reload of the
-    /// entity with only the properties the patch changed; <c>PreUpdate</c> and <c>IsValidToUpdate</c> run again, so keep them repeatable.
+    /// entity with only the properties the patch changed; <c>PreUpdate</c>, <c>IsValidToUpdate</c> and any override of this method run again, so keep them repeatable.
     /// </remarks>
     /// <param name="id">Entity identifier</param>
     /// <param name="entity">Updated object</param>
