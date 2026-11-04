@@ -569,6 +569,138 @@ public class ScopeAndBoundsTests : ServiceTestBase
         Assert.Equal(1, count);
     }
 
+    // --- F1: deletes look the keys up together with the scope ---
+
+    private static Expression<Func<Product, bool>> TenantA => p => p.Tenant == "A";
+
+    /// <summary>Products 2 and 4 are tenant A, 3 is tenant B. The service is keyed by price (a code that is not unique).</summary>
+    private void KeyByPrice(int sharedByA = 500, int sharedByB = 500, int onlyB = 777)
+    {
+        using (var context = Db.CreateContext())
+        {
+            context.Products.Find(2)!.Price = sharedByA;
+            context.Products.Find(4)!.Price = sharedByA;
+            context.Products.Find(3)!.Price = sharedByB == sharedByA ? sharedByA : onlyB;
+            context.SaveChanges();
+        }
+
+        Service.KeyPredicateRule = code => p => p.Price == code;
+        Service.KeyRule = p => (int)p.Price;
+        Service.PreferServiceKeys = true;
+    }
+
+    private bool Enabled(int id)
+    {
+        using var fresh = Db.CreateContext();
+        return fresh.Products.Find(id)!.IsEnabled;
+    }
+
+    [Fact]
+    public async Task Delete_Bulk_KeyThatExistsOnlyInAnotherScope_Is404AndNothingIsDeleted()
+    {
+        KeyByPrice(sharedByA: 500, sharedByB: 777); // 777 is tenant B only
+
+        // the count of rows in scope for these keys equals the number of keys (500 matches two rows): the old check passed
+        var ex = await Assert.ThrowsAsync<ApiException>(() => Service.Delete(new[] { 500, 777 }, TenantA, Ct));
+
+        Assert.Equal(HttpStatusCode.NotFound, ex.HttpStatusCode);
+        Assert.True(Enabled(2));
+        Assert.True(Enabled(3));
+        Assert.True(Enabled(4));
+    }
+
+    [Fact]
+    public async Task Delete_Bulk_KeyShared_ByTwoScopes_DeletesOnlyTheRowsInScope()
+    {
+        KeyByPrice(sharedByA: 500, sharedByB: 500); // 2, 3 and 4 all have code 500, 3 is tenant B
+
+        await Service.Delete(new[] { 500 }, TenantA, Ct);
+
+        Assert.False(Enabled(2));
+        Assert.False(Enabled(4));
+        Assert.True(Enabled(3));
+    }
+
+    [Fact]
+    public async Task CanDelete_Bulk_ForAKeyOutsideTheScope_Is404()
+    {
+        KeyByPrice(sharedByA: 500, sharedByB: 777);
+
+        await Assert.ThrowsAsync<ApiException>(() => Service.CanDelete(new[] { 500, 777 }, TenantA, Ct));
+        Assert.True(await Service.CanDelete(new[] { 500 }, TenantA, Ct));
+    }
+
+    [Fact]
+    public async Task Delete_Single_KeyShared_ByTwoScopes_DeletesTheRowInScope()
+    {
+        using (var context = Db.CreateContext())
+        {
+            context.Products.Find(3)!.Price = 500; // tenant B
+            context.Products.Find(4)!.Price = 500; // tenant A
+            context.SaveChanges();
+        }
+
+        Service.KeyPredicateRule = code => p => p.Price == code;
+
+        await Service.Delete(500, TenantA, Ct); // the unscoped lookup took the first row, tenant B's
+
+        Assert.False(Enabled(4));
+        Assert.True(Enabled(3));
+    }
+
+    [Fact]
+    public async Task Delete_Single_And_CanDelete_OutsideTheScope_Are404()
+    {
+        var ex = await Assert.ThrowsAsync<ApiException>(() => Service.Delete(3, TenantA, Ct)); // product 3 is tenant B
+        await Assert.ThrowsAsync<ApiException>(() => Service.CanDelete(3, TenantA, Ct));
+
+        Assert.Equal(HttpStatusCode.NotFound, ex.HttpStatusCode);
+        Assert.True(Enabled(3));
+    }
+
+    [Fact]
+    public async Task DeleteOverloads_WithoutAScope_BehaveLikeTheUnscopedOnes()
+    {
+        await Service.Delete(2, null, Ct);
+        Assert.True(await Service.CanDelete(3, null, Ct));
+        Assert.True(await Service.CanDelete(new[] { 3, 5 }, null, Ct));
+        await Service.Delete(new[] { 3, 5 }, null, Ct);
+
+        Assert.False(Enabled(2));
+        Assert.False(Enabled(3));
+        Assert.False(Enabled(5));
+    }
+
+    [Fact]
+    public async Task DefaultScopedDeleteOverloads_WithAScope_FailClosed()
+    {
+        IBaseService<Product, int> port = new OnlyGetByKeyService();
+
+        foreach (var call in new Func<Task>[]
+                 {
+                     () => port.Delete(1, TenantA, Ct),
+                     () => port.CanDelete(1, TenantA, Ct),
+                     () => port.CanDelete(new[] { 1 }, TenantA, Ct),
+                     () => port.Delete(new[] { 1 }, TenantA, Ct),
+                 })
+        {
+            var ex = await Assert.ThrowsAsync<ApiException>(call);
+            Assert.Equal("SCOPE_NOT_ENFORCED", ex.ErrorCode);
+        }
+    }
+
+    [Fact]
+    public async Task DefaultScopedDeleteOverloads_WithoutAScope_CallThePlainOnes()
+    {
+        IBaseService<Product, int> port = new OnlyGetByKeyService();
+
+        // the stub's plain members throw NotSupportedException: reaching them proves the call went through
+        await Assert.ThrowsAsync<NotSupportedException>(() => port.Delete(1, null, Ct));
+        await Assert.ThrowsAsync<NotSupportedException>(() => port.CanDelete(1, null, Ct));
+        await Assert.ThrowsAsync<NotSupportedException>(() => port.CanDelete(new[] { 1 }, null, Ct));
+        await Assert.ThrowsAsync<NotSupportedException>(() => port.Delete(new[] { 1 }, null, Ct));
+    }
+
     // --- fail closed on scope --------------------------------------------------------------------------------------
 
     [Fact]

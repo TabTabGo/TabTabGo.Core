@@ -343,6 +343,76 @@ public class EntityControllerBaseTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    // --- F1: deletes of a key that is shared by two scopes ---
+
+    private static void ServiceKeyedByPrice(IServiceCollection services) =>
+        services.AddScoped<TabTabGo.Core.Services.IBaseService<Product, int>>(sp =>
+            new TestProductService(sp.GetRequiredService<TabTabGo.Core.Data.IUnitOfWork>(),
+                sp.GetRequiredService<ILogger<TabTabGo.Core.Services.BaseService<Product, int>>>())
+            {
+                KeyPredicateRule = code => p => p.Price == code,
+                KeyRule = p => (int)p.Price,
+                PreferServiceKeys = true,
+            });
+
+    private static void SharePrices(TestApp app, params (int Id, decimal Price)[] prices)
+    {
+        using var context = app.Db.CreateContext();
+        foreach (var (id, price) in prices)
+        {
+            context.Products.Find(id)!.Price = price;
+        }
+
+        context.SaveChanges();
+    }
+
+    private static bool Enabled(TestApp app, int id)
+    {
+        using var context = app.Db.CreateContext();
+        return context.Products.Find(id)!.IsEnabled;
+    }
+
+    [Fact]
+    public async Task Controller_BulkDelete_CodeInTwoTenants_DoesNotTouchTheOtherTenant()
+    {
+        await using var app = await Start(services: ServiceKeyedByPrice);
+        SharePrices(app, (2, 500), (4, 500), (3, 777)); // 2 and 4 tenant A, 3 tenant B
+
+        // 500 matches two rows and 777 one outside the scope: the row count equalled the key count before
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Post, "/api/products/delete", Json("[500,777]"), tenant: "A"), Ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.True(Enabled(app, 2));
+        Assert.True(Enabled(app, 3));
+        Assert.True(Enabled(app, 4));
+    }
+
+    [Fact]
+    public async Task Controller_SingleDelete_CodeInTwoTenants_DeletesOnlyTheRowInScope()
+    {
+        await using var app = await Start(services: ServiceKeyedByPrice);
+        SharePrices(app, (3, 500), (4, 500)); // 3 tenant B, 4 tenant A
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Delete, "/api/products/500", tenant: "A"), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(Enabled(app, 4));
+        Assert.True(Enabled(app, 3));
+    }
+
+    [Fact]
+    public async Task MinimalApi_SingleDelete_CodeInTwoTenants_DeletesOnlyTheRowInScope()
+    {
+        await using var app = await TestApp.StartAsync(options: o => o.GetFixCriteria = p => p.Tenant == "A", services: ServiceKeyedByPrice);
+        SharePrices(app, (3, 500), (4, 500));
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Delete, "/products/500"), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(Enabled(app, 4));
+        Assert.True(Enabled(app, 3));
+    }
+
     // --- fail closed: scope enforcement is not optional ---
 
     /// <summary>Stands in for an 8.x service that has the default scoped UpdateChanges and ignores nothing it can enforce.</summary>

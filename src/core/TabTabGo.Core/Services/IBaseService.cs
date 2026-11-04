@@ -141,4 +141,46 @@ public interface IBaseService<TEntity, TKey> : IBaseReadService<TEntity, TKey> w
     /// <param name="ids">Entity keys</param>
     /// <param name="cancellationToken">Cancellation token</param>
     Task<IEnumerable<TEntity>> Delete(IEnumerable<TKey> ids, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deletes an entity that is inside <paramref name="scope"/>; an entity outside it is a 404. The key is looked up together
+    /// with the scope, so a key that is not unique across scopes (a code shared by two tenants) cannot reach another scope's row.
+    /// The default implementation cannot enforce a scope: with one it throws a 500 <c>ApiException</c> (<c>SCOPE_NOT_ENFORCED</c>).
+    /// </summary>
+    /// <param name="id">Entity key</param>
+    /// <param name="scope">Scope the entity must be in; null means no scope</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<TEntity> Delete(TKey id, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+        => scope == null ? Delete(id, cancellationToken) : throw ScopeNotEnforced();
+
+    /// <summary>Whether the entity can be deleted, looked up inside <paramref name="scope"/> (404 outside it). Fails closed like <c>Delete</c>.</summary>
+    /// <param name="id">Entity key</param>
+    /// <param name="scope">Scope the entity must be in; null means no scope</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<bool> CanDelete(TKey id, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+        => scope == null ? CanDelete(id, cancellationToken) : throw ScopeNotEnforced();
+
+    /// <summary>
+    /// Whether all the entities can be deleted. The keys are looked up together with <paramref name="scope"/> and every key must
+    /// resolve to an entity inside it (404 otherwise). Fails closed like <c>Delete</c>.
+    /// </summary>
+    /// <param name="ids">Entity keys</param>
+    /// <param name="scope">Scope the entities must be in; null means no scope</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<bool> CanDelete(IEnumerable<TKey> ids, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+        => scope == null ? CanDelete(ids, cancellationToken) : throw ScopeNotEnforced();
+
+    /// <summary>
+    /// Deletes several entities inside <paramref name="scope"/>: only rows that satisfy the scope are loaded and deleted, and
+    /// every key must resolve to at least one of them (404 otherwise, nothing is deleted). Fails closed like the single-key overload.
+    /// </summary>
+    /// <param name="ids">Entity keys</param>
+    /// <param name="scope">Scope the entities must be in; null means no scope</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<IEnumerable<TEntity>> Delete(IEnumerable<TKey> ids, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+        => scope == null ? Delete(ids, cancellationToken) : throw ScopeNotEnforced();
+
+    private static Exceptions.ApiException ScopeNotEnforced() => new(
+        "This service cannot enforce a scope on a delete, so nothing was deleted.",
+        statusCode: System.Net.HttpStatusCode.InternalServerError, code: "SCOPE_NOT_ENFORCED");
 }

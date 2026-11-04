@@ -419,13 +419,13 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
 
         try
         {
-            if (!await _currentService.CanDelete(id, cancellationToken))
+            if (!await _currentService.CanDelete(id, GetFixCriteria, cancellationToken))
             {
                 return Error(HttpStatusCode.PreconditionFailed,
                     ApiErrorResponses.Failure($"{EntityName} #{id} can't be deleted", $"{EntityName}_Cannot_Delete".ToUpperInvariant(), HttpContext));
             }
 
-            await _currentService.Delete(id, cancellationToken);
+            await _currentService.Delete(id, GetFixCriteria, cancellationToken); // looked up with the scope again: a key shared by two scopes must not reach the other one
             return Ok(new
             {
                 Message = $"{EntityName} deleted successfully",
@@ -468,11 +468,11 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
                 }
             }
 
-            if (!await _currentService.CanDelete(keys, cancellationToken))
+            if (!await _currentService.CanDelete(keys, GetFixCriteria, cancellationToken))
                 return Error(HttpStatusCode.PreconditionFailed,
                     ApiErrorResponses.Failure($"{EntityName} can't be deleted", $"{EntityName}_Cannot_Delete".ToUpperInvariant(), HttpContext));
 
-            await _currentService.Delete(keys, cancellationToken);
+            await _currentService.Delete(keys, GetFixCriteria, cancellationToken);
             return Ok(new { Message = $"{EntityName} deleted successfully", Code = $"{EntityName}_Deleted".ToUpperInvariant() });
         }
         catch (ApiException ex)

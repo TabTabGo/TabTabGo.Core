@@ -47,7 +47,10 @@ public class TestProductService : BaseService<Product, int>
 
     public override Expression<Func<Product, bool>> GetKeyPredicate(int id) => KeyPredicateRule?.Invoke(id) ?? (p => p.Id == id);
 
-    public override int GetKey(Product entity) => entity.Id;
+    /// <summary>Replaces the key of an entity (a service keyed by a code that is not the primary key).</summary>
+    public Func<Product, int>? KeyRule { get; set; }
+
+    public override int GetKey(Product entity) => KeyRule?.Invoke(entity) ?? entity.Id;
 
     public override bool IsValidToCreate(Product entity, out string validationErrorMessage)
     {

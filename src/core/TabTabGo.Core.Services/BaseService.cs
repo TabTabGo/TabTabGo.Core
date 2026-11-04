@@ -131,10 +131,22 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="id">Entity key</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <exception cref="ApiException">404 when missing, 400 when <see cref="IsValidToDelete"/> rejects it</exception>
-    public virtual async Task<TEntity> Delete(TKey id, CancellationToken cancellationToken = default)
-    {
-        var entity = await LoadRequiredAsync(id, cancellationToken);
+    public virtual async Task<TEntity> Delete(TKey id, CancellationToken cancellationToken = default) =>
+        await DeleteLoadedAsync(id, await LoadRequiredAsync(id, cancellationToken), cancellationToken);
 
+    /// <inheritdoc />
+    public virtual async Task<TEntity> Delete(TKey id, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+    {
+        if (scope == null)
+        {
+            return await Delete(id, cancellationToken);
+        }
+
+        return await DeleteLoadedAsync(id, await LoadRequiredAsync(id, scope, cancellationToken), cancellationToken);
+    }
+
+    private async Task<TEntity> DeleteLoadedAsync(TKey id, TEntity entity, CancellationToken cancellationToken)
+    {
         if (!IsValidToDelete(entity, out var errorMessage))
             throw new ApiException($"Can't delete {typeof(TEntity).Name} '{id}'. {errorMessage}", errorNumber: 3001, statusCode: HttpStatusCode.BadRequest);
         await PreDelete(entity, cancellationToken);
@@ -205,6 +217,40 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return IsValidToDelete(entity, out _);
     }
 
+    /// <inheritdoc />
+    public virtual async Task<bool> CanDelete(TKey id, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+    {
+        if (scope == null)
+        {
+            return await CanDelete(id, cancellationToken);
+        }
+
+        return IsValidToDelete(await LoadRequiredAsync(id, scope, cancellationToken), out _);
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<bool> CanDelete(IEnumerable<TKey> ids, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+    {
+        if (scope == null)
+        {
+            return await CanDelete(ids, cancellationToken);
+        }
+
+        var entities = await LoadByKeysAsync(ids, scope, cancellationToken);
+        return entities.All(e => IsValidToDelete(e, out _));
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<IEnumerable<TEntity>> Delete(IEnumerable<TKey> ids, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+    {
+        if (scope == null)
+        {
+            return await Delete(ids, cancellationToken);
+        }
+
+        return await DeleteLoadedAsync(await LoadByKeysAsync(ids, scope, cancellationToken), cancellationToken);
+    }
+
     /// <summary>
     /// Validates the delete of several entities. Entities that do not exist are not part of the result.
     /// </summary>
@@ -235,7 +281,11 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <inheritdoc />
     public virtual async Task<IEnumerable<TEntity>> Delete(IEnumerable<TKey> ids, CancellationToken cancellationToken)
     {
-        var enumerable = await LoadByKeysAsync(ids, cancellationToken);
+        return await DeleteLoadedAsync(await LoadByKeysAsync(ids, cancellationToken), cancellationToken);
+    }
+
+    private async Task<IEnumerable<TEntity>> DeleteLoadedAsync(TEntity[] enumerable, CancellationToken cancellationToken)
+    {
         foreach (var entity in enumerable)
         {
             if (!IsValidToDelete(entity, out var errorMessage))
@@ -253,7 +303,8 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return enumerable;
     }
 
-    private async Task<TEntity[]> LoadByKeysAsync(IEnumerable<TKey> ids, CancellationToken cancellationToken)
+    private async Task<TEntity[]> LoadByKeysAsync(IEnumerable<TKey> ids, CancellationToken cancellationToken,
+        Expression<Func<TEntity, bool>>? scope = null)
     {
         ArgumentNullException.ThrowIfNull(ids);
         var keys = ids.Distinct().ToList();
@@ -263,10 +314,40 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         }
 
         // one IN list (or, without store metadata, a bounded OR): Contains(GetKey(e)) cannot be translated to SQL
-        var predicate = KeysPredicate(keys);
+        var predicate = PredicateBuilder.New(KeysPredicate(keys));
+        if (scope != null)
+        {
+            predicate = predicate.And(scope);
+        }
 
         var entities = await CurrentRepository.GetAsync(filter: predicate, cancellationToken: cancellationToken);
         return entities as TEntity[] ?? entities.ToArray();
+    }
+
+    // The scope is part of the query, not a check on the keys beforehand: a key that is not unique across scopes loads only the
+    // rows inside it. Every key must find at least one of them, otherwise the whole request is a 404 and nothing is touched.
+    private async Task<TEntity[]> LoadByKeysAsync(IEnumerable<TKey> ids, Expression<Func<TEntity, bool>> scope, CancellationToken cancellationToken)
+    {
+        var keys = ids.Distinct().ToList();
+        var entities = await LoadByKeysAsync(keys, cancellationToken, scope);
+        var found = new HashSet<TKey>(entities.Select(GetKey));
+        if (keys.Any(k => !found.Contains(k)))
+        {
+            throw new ApiException($"{typeof(TEntity).Name} was not found.", errorNumber: 1404, statusCode: HttpStatusCode.NotFound, code: "NotFound");
+        }
+
+        return entities;
+    }
+
+    // looked up together with the scope; the entity becomes CurrentEntity like any other load
+    private async Task<TEntity> LoadRequiredAsync(TKey id, Expression<Func<TEntity, bool>> scope, CancellationToken cancellationToken)
+    {
+        var entity = await CurrentRepository.FirstOrDefaultAsync(filter: PredicateBuilder.New(ResolveKeyPredicate(id)).And(scope),
+            includeProperties: IncludeProperties.Distinct().ToArray(), cancellationToken: cancellationToken)
+            ?? throw NotFound(id);
+        PopulateAdditionalProperties(entity);
+        CurrentEntity = entity;
+        return entity;
     }
 
     #endregion

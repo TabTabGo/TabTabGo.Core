@@ -371,13 +371,13 @@ public static class SetupEntityRouters
                     return TypedResults.NotFound(ApiErrorResponses.NotFound(entityName, id, http));
                 }
 
-                if (!await service.CanDelete(id, cancellationToken))
+                if (!await service.CanDelete(id, options.GetFixCriteria, cancellationToken))
                 {
                     return Json(HttpStatusCode.PreconditionFailed,
                         ApiErrorResponses.Failure($"{entityName} #{id} can't be deleted", $"{entityName}_Cannot_Delete".ToUpperInvariant(), http));
                 }
 
-                await service.Delete(id, cancellationToken);
+                await service.Delete(id, options.GetFixCriteria, cancellationToken); // looked up with the scope again: a key shared by two scopes must not reach the other one
                 return TypedResults.Ok<object>(new
                 {
                     Message = $"{entityName} deleted successfully",
