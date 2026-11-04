@@ -337,8 +337,10 @@ internal static class ODataFilterTokenizer
 
                     depth--;
                 }
-                else if (depth == 0 && char.IsWhiteSpace(c) && (NextWordIs("and") || NextWordIs("or")))
+                else if (depth == 0 && char.IsWhiteSpace(c) && !char.IsWhiteSpace(text[_position - 1])
+                         && (NextWordIs("and") || NextWordIs("or")))
                 {
+                    // only the first blank of a run asks: NextWordIs skips the whole run itself, so asking at each blank is quadratic
                     break;
                 }
 

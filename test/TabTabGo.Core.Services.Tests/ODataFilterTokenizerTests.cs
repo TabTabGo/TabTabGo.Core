@@ -265,6 +265,32 @@ public class ODataFilterTokenizerTests
     }
 
     [Fact]
+    public void Split_LongRunOfBlanks_IsLinear()
+    {
+        // each blank used to look ahead over the rest of the run (quadratic)
+        var filter = "xmlExist(a,'v') and A" + new string(' ', ODataFilterTokenizer.MaxFilterLength - 40) + "B";
+        Split(filter); // warm up the JIT
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        for (var i = 0; i < 20; i++)
+        {
+            Split(filter);
+        }
+
+        watch.Stop();
+        Assert.True(watch.ElapsedMilliseconds < 200, $"20 parses took {watch.ElapsedMilliseconds} ms");
+    }
+
+    [Fact]
+    public void Split_BlanksBeforeAndAfterTheKeyword_StillSplits()
+    {
+        var result = Split("A eq 1     and     xmlExist(a,'v')");
+
+        Assert.Equal("A eq 1", result.Filter);
+        Assert.Single(result.CustomFilters);
+    }
+
+    [Fact]
     public void Split_FilterJustUnderCap_Parses()
     {
         var filter = "A eq '" + new string('x', ODataFilterTokenizer.MaxFilterLength - 10) + "'";
