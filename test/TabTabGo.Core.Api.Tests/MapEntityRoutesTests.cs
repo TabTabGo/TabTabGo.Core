@@ -524,6 +524,36 @@ public class MapEntityRoutesTests
         Assert.Null(options.ExportFixCriteria);
     }
 
+    [Theory]
+    [InlineData("PATCH")]
+    [InlineData("DELETE")]
+    public async Task Lookup_ThrowingApiException_GetsTheStandardBodyWithoutTheMiddleware(string method)
+    {
+        // the scoped lookup ran outside the try block, so an ApiException escaped as a raw 500
+        await using var app = await TestApp.StartAsync(services: s => s.AddScoped<IBaseService<Product, int>>(sp =>
+            new ForbiddenLookupService(sp.GetRequiredService<TabTabGo.Core.Data.IUnitOfWork>())));
+
+        var response = await app.Client.SendAsync(app.Request(new HttpMethod(method), "/products/2",
+            method == "PATCH" ? Patch("[]") : null), Ct);
+        var body = await Body(response);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("NO_ACCESS", body.GetProperty("code").GetString());
+        Assert.True(body.TryGetProperty("traceId", out _));
+    }
+
+    private sealed class ForbiddenLookupService(TabTabGo.Core.Data.IUnitOfWork unitOfWork)
+        : BaseService<Product, int>(unitOfWork, Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseService<Product, int>>.Instance)
+    {
+        public override System.Linq.Expressions.Expression<Func<Product, bool>> GetKeyPredicate(int id) => p => p.Id == id;
+
+        public override int GetKey(Product entity) => entity.Id;
+
+        public override Task<Product?> GetByKey(int id, DateTimeOffset? lastUpdatedDate = null, string[]? includeProperties = null,
+            System.Linq.Expressions.Expression<Func<Product, bool>>? fixCriteria = null, CancellationToken cancellationToken = default) =>
+            throw new TabTabGo.Core.Exceptions.ApiException("no", statusCode: HttpStatusCode.Forbidden, code: "NO_ACCESS");
+    }
+
     private sealed class ThrowingService : IBaseService<Product, int>
     {
         private static InvalidOperationException Boom() => new("secret-internal-detail at Some.Internal.Class");
