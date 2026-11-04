@@ -10,122 +10,186 @@ using TabTabGo.Data.EF.Repositories;
 
 namespace TabTabGo.Data.EF;
 
-public abstract class UnitOfWork(DbContext? context, ILogger<UnitOfWork> logger) : IUnitOfWork
+/// <summary>
+/// Entity Framework unit of work: hands out repositories over one <see cref="DbContext"/>, owns the transaction and the save.
+/// </summary>
+public abstract class UnitOfWork : IUnitOfWork
 {
-    // check if context is null then throw exception
+    private readonly DbContext _context;
+    private readonly ILogger<UnitOfWork> _logger;
+    private readonly bool _ownsContext;
 
-    protected readonly ConcurrentDictionary<string, object> _repositories = new ConcurrentDictionary<string, object>();
+    /// <summary>Repositories created so far by "entity:key" name.</summary>
+    protected readonly ConcurrentDictionary<string, object> _repositories = new();
 
-    public virtual void UpdateState<TEntity>(TEntity entity, EntityState state)
+    /// <summary>Creates a unit of work.</summary>
+    /// <param name="context">The context; must not be null</param>
+    /// <param name="logger">Logger</param>
+    /// <param name="ownsContext">
+    /// When true <see cref="Dispose"/> closes the connection and disposes the context. Leave false when the DI container
+    /// owns the context (the usual case); pass true outside DI.
+    /// </param>
+    protected UnitOfWork(DbContext context, ILogger<UnitOfWork> logger, bool ownsContext = false)
     {
-        if (entity != null && context != null)
-            context.Entry(entity).State = state;
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(logger);
+        _context = context;
+        _logger = logger;
+        _ownsContext = ownsContext;
     }
 
+    /// <summary>The context the unit of work works on.</summary>
+    protected DbContext Context => _context;
+
+    /// <summary>Sets the tracking state of an entity.</summary>
+    public virtual void UpdateState<TEntity>(TEntity entity, EntityState state)
+    {
+        if (entity != null)
+            _context.Entry(entity).State = state;
+    }
+
+    /// <inheritdoc />
     public virtual void SetEntityStateModified<TEntity, TProperty>(TEntity entity,
         Expression<Func<TEntity, TProperty>> propertyExpression) where TEntity : class where TProperty : class
     {
-        if (context != null) context.Entry(entity).Reference(propertyExpression!).IsModified = true;
+        _context.Entry(entity).Reference(propertyExpression!).IsModified = true;
     }
 
+    /// <inheritdoc />
     public virtual void RemoveNavigationProperty<TEntity, TOwnerEntity>(TOwnerEntity ownerEntity, object id)
         where TEntity : class
         where TOwnerEntity : class
     {
         try
         {
-            var receiverObjects = ApplyWhere(context?.Set<TEntity>(), ownerEntity.GetType().Name + "Id", id);
+            var receiverObjects = ApplyWhere(_context.Set<TEntity>(), ownerEntity.GetType().Name + "Id", id).ToList();
 
-            foreach (TEntity receiverObject in receiverObjects)
+            foreach (var receiverObject in receiverObjects)
             {
-                context?.Set<TEntity>().Remove(receiverObject);
+                _context.Set<TEntity>().Remove(receiverObject);
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, $"Error when trying to remove navigation property. The deletion was not performed");
+            _logger.LogError(ex, "Error when trying to remove navigation property. The deletion was not performed");
+            throw;
         }
     }
 
-    public virtual dynamic? GetChanges()
+    /// <inheritdoc />
+    public virtual IReadOnlyList<EntityChange> GetChanges()
     {
-        List<dynamic> result = new List<dynamic>();
-        if (context == null) return result;
-        var changes = context.ChangeTracker.Entries();
-        foreach (var entry in changes)
+        var result = new List<EntityChange>();
+        foreach (var entry in _context.ChangeTracker.Entries())
         {
             switch (entry.State)
             {
                 case EntityState.Modified:
-                    result.Add(new { entry.State, entry.OriginalValues, entry.CurrentValues });
+                    result.Add(new EntityChange(entry.Entity, entry.State.ToString(), Snapshot(entry.OriginalValues), Snapshot(entry.CurrentValues)));
                     break;
                 case EntityState.Added:
-                    result.Add(new { entry.State, entry.CurrentValues });
+                    result.Add(new EntityChange(entry.Entity, entry.State.ToString(), new Dictionary<string, object?>(), Snapshot(entry.CurrentValues)));
                     break;
                 case EntityState.Deleted:
-                    result.Add(new { entry.State, entry.OriginalValues });
+                    result.Add(new EntityChange(entry.Entity, entry.State.ToString(), Snapshot(entry.OriginalValues), new Dictionary<string, object?>()));
                     break;
-                case EntityState.Detached:
-                    break;
-                case EntityState.Unchanged:
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
             }
         }
 
         return result;
     }
 
+    private static Dictionary<string, object?> Snapshot(Microsoft.EntityFrameworkCore.ChangeTracking.PropertyValues values)
+    {
+        // values are copied: PropertyValues is a live view of the tracker
+        var snapshot = new Dictionary<string, object?>();
+        foreach (var property in values.Properties)
+        {
+            snapshot[property.Name] = values[property];
+        }
+
+        return snapshot;
+    }
+
+    /// <inheritdoc />
     public virtual IGenericRepository<TEntity, TKey> Repository<TEntity, TKey>(string? name = null)
         where TEntity : class
     {
-        var entityName = string.IsNullOrEmpty(name) ? typeof(TEntity).FullName : name;
-        if (entityName != null && _repositories.TryGetValue(entityName, out var repository))
-        {
-            return (IGenericRepository<TEntity, TKey>)repository;
-        }
-        repository = new GenericRepository<TEntity, TKey>(context);
-        if (entityName != null) _repositories.TryAdd(entityName, repository);
+        var entityName = $"{(string.IsNullOrEmpty(name) ? typeof(TEntity).FullName : name)}:{typeof(TKey).FullName}";
+        var repository = _repositories.GetOrAdd(entityName, _ => new GenericRepository<TEntity, TKey>(_context));
         return (IGenericRepository<TEntity, TKey>)repository;
     }
 
+    /// <inheritdoc />
     public virtual void BeginTransaction(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
     {
-        context?.Database.BeginTransaction();
+        _context.Database.BeginTransaction(isolationLevel);
     }
 
+    /// <inheritdoc />
+    public virtual Task BeginTransactionAsync(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted,
+        CancellationToken cancellationToken = default)
+    {
+        return _context.Database.BeginTransactionAsync(isolationLevel, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public virtual void Commit()
     {
-        context?.SaveChanges();
-        context?.Database.CommitTransaction();
+        _context.SaveChanges();
+        _context.Database.CommitTransaction();
     }
 
+    /// <inheritdoc />
+    public virtual async Task CommitAsync(CancellationToken cancellationToken = default)
+    {
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _context.Database.CommitTransactionAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public virtual void Rollback()
     {
-        context?.Database.RollbackTransaction();
+        _context.Database.RollbackTransaction();
     }
 
+    /// <inheritdoc />
+    public virtual Task RollbackAsync(CancellationToken cancellationToken = default)
+    {
+        return _context.Database.RollbackTransactionAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public virtual bool HasActiveTransaction => _context.Database.CurrentTransaction != null;
+
+    /// <inheritdoc />
     public virtual int SaveChanges()
     {
-        return context?.SaveChanges() ?? 0;
+        return _context.SaveChanges();
     }
 
+    /// <inheritdoc />
     public virtual Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        return context?.SaveChangesAsync(cancellationToken);
+        return _context.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Saves the pending changes. EF Core has no built-in bulk save, so this saves like <see cref="SaveChangesAsync"/>;
+    /// override it to plug in a bulk library.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
     public virtual Task<int> SaveChangesInBulkAsync(CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        return SaveChangesAsync(cancellationToken);
     }
 
+    /// <inheritdoc />
     public virtual void AddOrUpdateGraph<TEntity>(TEntity entity) where TEntity : class
     {
-        context?.ChangeTracker.TrackGraph(entity, e =>
+        _context.ChangeTracker.TrackGraph(entity, e =>
         {
-            var alreadyTrackedEntity = context.ChangeTracker.Entries()
+            var alreadyTrackedEntity = _context.ChangeTracker.Entries()
                 .FirstOrDefault(entry => entry.Entity.Equals(e.Entry.Entity));
             if (alreadyTrackedEntity != null)
             {
@@ -136,29 +200,27 @@ public abstract class UnitOfWork(DbContext? context, ILogger<UnitOfWork> logger)
         });
     }
 
+    /// <summary>
+    /// Closes the connection and disposes the context only when the unit of work owns it.
+    /// </summary>
     public virtual void Dispose()
     {
-        // make sure to call connection close if it is open
-        if (context != null && context.Database.GetDbConnection().State == ConnectionState.Open)
+        if (_ownsContext)
         {
-            context.Database.CloseConnection();
+            if (_context.Database.GetDbConnection().State == ConnectionState.Open)
+            {
+                _context.Database.CloseConnection();
+            }
+
+            _context.Dispose();
         }
 
-        context?.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     #region Helper Methods
 
-    /// <summary>
-    /// 
-    /// </summary>
     /// <remarks>This code from https://www.jhipster.tech/</remarks>
-    /// <param name="source"></param>
-    /// <param name="propertyName"></param>
-    /// <param name="propertyValue"></param>
-    /// <typeparam name="T"></typeparam>
-    /// <returns></returns>
-    /// <exception cref="NullReferenceException"></exception>
     private IQueryable<T> ApplyWhere<T>(IQueryable<T> source, string propertyName, object propertyValue)
         where T : class
     {
@@ -166,8 +228,8 @@ public abstract class UnitOfWork(DbContext? context, ILogger<UnitOfWork> logger)
         var mba = PropertyAccessorCache<T>.Get(propertyName);
         if (mba == null)
         {
-            var ex = new NullReferenceException();
-            logger.LogError(ex, $"Error when trying to get the property, it doesn't exist");
+            var ex = new InvalidOperationException($"Property '{propertyName}' does not exist on {typeof(T).Name}.");
+            _logger.LogError(ex, "Error when trying to get the property, it doesn't exist");
             throw ex;
         }
 
@@ -183,7 +245,7 @@ public abstract class UnitOfWork(DbContext? context, ILogger<UnitOfWork> logger)
             ex is OverflowException ||
             ex is ArgumentNullException)
         {
-            logger.LogError(ex, $"Error when trying to convert type of property value with type of property");
+            _logger.LogError(ex, "Error when trying to convert type of property value with type of property");
             throw;
         }
 
@@ -194,14 +256,14 @@ public abstract class UnitOfWork(DbContext? context, ILogger<UnitOfWork> logger)
         var expression = Expression.Lambda(eqe, mba.Parameters[0]);
 
         // 4. Construct new query
-        MethodCallExpression resultExpression = Expression.Call(
+        var resultExpression = Expression.Call(
             null,
             GetMethodInfo(Queryable.Where!, source, (Expression<Func<T, bool>>?)null),
-            new Expression[] { source.Expression, Expression.Quote(expression) });
+            new[] { source.Expression, Expression.Quote(expression) });
         return source.Provider.CreateQuery<T>(resultExpression);
     }
 
-    private MethodInfo GetMethodInfo<T1, T2, T3>(Func<T1, T2, T3> f, T1 unused1, T2 unused2)
+    private static MethodInfo GetMethodInfo<T1, T2, T3>(Func<T1, T2, T3> f, T1 unused1, T2 unused2)
     {
         return f.Method;
     }
