@@ -1,8 +1,11 @@
-﻿using System.Data;
+using System.Data;
 using System.Linq.Expressions;
 
 namespace TabTabGo.Core.Data;
 
+/// <summary>
+/// Unit of work: one transaction and one commit over the repositories it hands out.
+/// </summary>
 public interface IUnitOfWork : IDisposable
 {
     /// <summary>
@@ -80,5 +83,76 @@ public interface IUnitOfWork : IDisposable
     /// Get entity changes from db context
     /// </summary>
     /// <returns>list of changes</returns>
-    dynamic? GetChanges();
+    IReadOnlyList<EntityChange> GetChanges();
+
+    /// <summary>
+    /// Begin transaction asynchronously. The default implementation calls <see cref="BeginTransaction"/>.
+    /// </summary>
+    /// <param name="isolationLevel">Isolation level</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task BeginTransactionAsync(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted, CancellationToken cancellationToken = default)
+    {
+        BeginTransaction(isolationLevel);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Commit transaction asynchronously. The default implementation calls <see cref="Commit"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task CommitAsync(CancellationToken cancellationToken = default)
+    {
+        Commit();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Roll back transaction asynchronously. The default implementation calls <see cref="Rollback"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task RollbackAsync(CancellationToken cancellationToken = default)
+    {
+        Rollback();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// True while a transaction is open. The default implementation returns false.
+    /// </summary>
+    bool HasActiveTransaction => false;
+
+    /// <summary>
+    /// Runs <paramref name="operation"/> and commits it as one unit; rolls back and rethrows when it fails. Providers
+    /// with a retrying execution strategy override this so the whole unit (begin, operation, commit) is what is retried.
+    /// When a transaction is already open the operation just runs inside it and the owner of that transaction commits.
+    /// The default implementation uses <see cref="BeginTransactionAsync"/>, <see cref="CommitAsync"/> and <see cref="RollbackAsync"/>.
+    /// </summary>
+    /// <typeparam name="T">Result type</typeparam>
+    /// <param name="operation">
+    /// The work; it may run more than once under a retrying strategy, so it must be repeatable: it loads what it needs and
+    /// does not rely on tracker state left by an earlier attempt (the EF implementation clears the tracker before each retry).
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    async Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        if (HasActiveTransaction)
+        {
+            return await operation(cancellationToken).ConfigureAwait(false);
+        }
+
+        await BeginTransactionAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var result = await operation(cancellationToken).ConfigureAwait(false);
+            await CommitAsync(cancellationToken).ConfigureAwait(false);
+            return result;
+        }
+        catch
+        {
+            // this method began the transaction, so it rolls it back whatever HasActiveTransaction reports
+            await RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+    }
 }

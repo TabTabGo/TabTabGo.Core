@@ -1,37 +1,70 @@
-﻿using System.Linq.Expressions;
-using Microsoft.Extensions.Logging;
-using TabTabGo.Core.Entities;
-using TabTabGo.Core.Extensions;
-using Microsoft.AspNetCore.JsonPatch;
-using System.Reflection;
+using System.Linq.Expressions;
+using TabTabGo.Core.Enums;
 using System.Text.Json.Nodes;
+﻿using System.Net;
+using System.Reflection;
 using LinqKit;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.JsonPatch.Operations;
-
+using Microsoft.Extensions.Logging;
 using TabTabGo.Core.Data;
+using TabTabGo.Core.Entities;
 using TabTabGo.Core.Exceptions;
-using TabTabGo.Core.ViewModels;
-// ReSharper disable All
+using TabTabGo.Core.Extensions;
+using TabTabGo.Core.Json;
+
 namespace TabTabGo.Core.Services;
 
+/// <summary>
+/// Read and write service for an entity: create, update (full, changes, JSON patch, partial JSON) and soft delete with
+/// validation hooks. Failures are <see cref="ApiException"/>s with a status code: 404 when the entity does not exist,
+/// 400 when a validation hook rejects the operation.
+/// </summary>
+/// <typeparam name="TEntity">Entity type</typeparam>
+/// <typeparam name="TKey">Entity key type</typeparam>
 public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey>, IBaseService<TEntity, TKey>
     where TEntity : class, IEntity
 {
+    /// <summary>The unit of work that saves the changes.</summary>
     protected readonly IUnitOfWork _unitOfWork;
 
-    public new IGenericRepository<TEntity?, TKey> CurrentRepository =>
-        (IGenericRepository<TEntity?, TKey>)base.CurrentRepository;
+    /// <summary>The write repository.</summary>
+    public new IGenericRepository<TEntity, TKey> CurrentRepository =>
+        (IGenericRepository<TEntity, TKey>)base.CurrentRepository;
 
+    /// <summary>Creates the service with an explicit repository.</summary>
+    /// <param name="unitOfWork">Unit of work</param>
+    /// <param name="repository">Repository</param>
+    /// <param name="logger">Logger</param>
     public BaseService(IUnitOfWork unitOfWork, IGenericRepository<TEntity, TKey> repository,
         ILogger<BaseService<TEntity, TKey>> logger) : base(repository, logger)
     {
+        ArgumentNullException.ThrowIfNull(unitOfWork);
         _unitOfWork = unitOfWork;
     }
-    
+
+    /// <summary>Creates the service; the repository comes from the unit of work.</summary>
+    /// <param name="unitOfWork">Unit of work</param>
+    /// <param name="logger">Logger</param>
     public BaseService(IUnitOfWork unitOfWork,
-        ILogger<BaseService<TEntity, TKey>> logger) : base(unitOfWork.Repository<TEntity,TKey>(), logger)
+        ILogger<BaseService<TEntity, TKey>> logger) : base(RepositoryOf(unitOfWork), logger)
     {
         _unitOfWork = unitOfWork;
+    }
+
+    private static IGenericRepository<TEntity, TKey> RepositoryOf(IUnitOfWork unitOfWork)
+    {
+        ArgumentNullException.ThrowIfNull(unitOfWork);
+        return unitOfWork.Repository<TEntity, TKey>();
+    }
+
+    private ApiException NotFound(TKey id) =>
+        new($"{typeof(TEntity).Name} '{id}' was not found.", errorNumber: 1404, statusCode: HttpStatusCode.NotFound, code: "NotFound");
+
+    private async Task<TEntity> LoadRequiredAsync(TKey id, CancellationToken cancellationToken, string[]? includeProperties = null)
+    {
+        await LoadEntityAsync(id, cancellationToken, includeProperties);
+        return CurrentEntity ?? throw NotFound(id);
     }
 
     #region Create Methods
@@ -39,28 +72,29 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <summary>
     /// Create Entity
     /// </summary>
-    /// <param name="entity"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
-    public virtual async Task<TEntity> Create(TEntity entity,
+    /// <param name="entity">The entity</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The stored entity, reloaded from the repository</returns>
+    public virtual async Task<TEntity> Create(TEntity? entity,
         CancellationToken cancellationToken = default)
     {
-        if (!IsValidToCreate(entity, out string errorMessage))
-            throw new ApiException($"Failed to create {entity.ToString()}. {errorMessage}.", errorNumber: 2001);
+        ArgumentNullException.ThrowIfNull(entity);
+        if (!IsValidToCreate(entity, out var errorMessage))
+            throw new ApiException($"Failed to create {typeof(TEntity).Name}. {errorMessage}", errorNumber: 2001, statusCode: HttpStatusCode.BadRequest);
         await PreCreate(entity, cancellationToken);
-        var newEntity = await CurrentRepository.InsertAsync(entity, cancellationToken);
+        var newEntity = await CurrentRepository.InsertAsync(entity, cancellationToken) ?? entity;
         await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
-        await LoadEntityAsync(GetKey(entity), cancellationToken);
-        await PostCreate(CurrentEntity, cancellationToken);
-        return CurrentEntity;
+        await LoadEntityAsync(GetKey(newEntity), cancellationToken);
+        var created = CurrentEntity ?? newEntity;
+        await PostCreate(created, cancellationToken);
+        return created;
     }
 
     /// <summary>
     /// Validate passed entity before createed in DB
     /// </summary>
-    /// <param name="entity"></param>
-    /// <param name="validationErrorMessage"></param>
-    /// <returns></returns>
+    /// <param name="entity">The entity</param>
+    /// <param name="validationErrorMessage">Reason when invalid</param>
     public virtual bool IsValidToCreate(TEntity entity, out string validationErrorMessage)
     {
         validationErrorMessage = string.Empty;
@@ -70,15 +104,17 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <summary>
     /// Post Create methods
     /// </summary>
-    /// <param name="entity"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
+    /// <param name="entity">The stored entity</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     protected virtual Task PostCreate(TEntity entity,
         CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
     }
 
+    /// <summary>Runs before the entity is inserted.</summary>
+    /// <param name="entity">The entity</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     protected virtual Task PreCreate(TEntity entity,
         CancellationToken cancellationToken = default)
     {
@@ -92,28 +128,39 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <summary>
     /// Delete an entity ( Disable entity)
     /// </summary>
-    /// <param name="id"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
-    public virtual async Task<TEntity> Delete(TKey id, CancellationToken cancellationToken = default)
-    {
-        await LoadEntityAsync(id, cancellationToken: cancellationToken);
+    /// <param name="id">Entity key</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <exception cref="ApiException">404 when missing, 400 when <see cref="IsValidToDelete"/> rejects it</exception>
+    public virtual async Task<TEntity> Delete(TKey id, CancellationToken cancellationToken = default) =>
+        await DeleteLoadedAsync(id, await LoadRequiredAsync(id, cancellationToken), cancellationToken);
 
-        if (!IsValidToDelete(CurrentEntity, out string errorMessage))
-            throw new Exception($"Can't delete {CurrentEntity.ToString()}. {errorMessage}");
-        await PreDelete(this.CurrentEntity, cancellationToken);
-        CurrentEntity.IsEnabled = false;
+    /// <inheritdoc />
+    public virtual async Task<TEntity> Delete(TKey id, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+    {
+        if (scope == null)
+        {
+            return await Delete(id, cancellationToken);
+        }
+
+        return await DeleteLoadedAsync(id, await LoadRequiredAsync(id, scope, cancellationToken), cancellationToken);
+    }
+
+    private async Task<TEntity> DeleteLoadedAsync(TKey id, TEntity entity, CancellationToken cancellationToken)
+    {
+        if (!IsValidToDelete(entity, out var errorMessage))
+            throw new ApiException($"Can't delete {typeof(TEntity).Name} '{id}'. {errorMessage}", errorNumber: 3001, statusCode: HttpStatusCode.BadRequest);
+        await PreDelete(entity, cancellationToken);
+        entity.IsEnabled = false;
         await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
-        await PostDelete(this.CurrentEntity, cancellationToken);
-        return CurrentEntity;
+        await PostDelete(entity, cancellationToken);
+        return entity;
     }
 
     /// <summary>
-    /// Validate if entity can be deleted 
+    /// Validate if entity can be deleted
     /// </summary>
-    /// <param name="entity"></param>
-    /// <param name="validationErrorMessage"></param>
-    /// <returns></returns>
+    /// <param name="entity">The entity</param>
+    /// <param name="validationErrorMessage">Reason when it cannot</param>
     public virtual bool IsValidToDelete(TEntity entity, out string validationErrorMessage)
     {
         validationErrorMessage = string.Empty;
@@ -121,75 +168,130 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     }
 
     /// <summary>
-    /// function executed after the delete eneityt is completed 
+    /// function executed after the delete eneityt is completed
     /// </summary>
-    /// <param name="entity"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
+    /// <param name="entity">The entity</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     protected virtual Task PostDelete(TEntity entity,
         CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
     }
 
+    /// <summary>Runs before the entity is disabled.</summary>
+    /// <param name="entity">The entity</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     protected virtual Task PreDelete(TEntity entity,
         CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
     }
 
+    /// <summary>Runs after several entities are disabled.</summary>
+    /// <param name="entity">The entities</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     protected virtual Task PostDelete(IEnumerable<TEntity> entity,
         CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
     }
 
-    protected virtual async Task PreDelete(IEnumerable<TEntity> entity,
+    /// <summary>Runs before several entities are disabled.</summary>
+    /// <param name="entity">The entities</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    protected virtual Task PreDelete(IEnumerable<TEntity> entity,
         CancellationToken cancellationToken = default)
     {
+        return Task.CompletedTask;
     }
 
     /// <summary>
-    /// Function used to check if can delete entity from client side 
+    /// Function used to check if can delete entity from client side
     /// </summary>
-    /// <param name="id"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
+    /// <param name="id">Entity key</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <exception cref="ApiException">404 when the entity does not exist</exception>
     public virtual async Task<bool> CanDelete(TKey id, CancellationToken cancellationToken = default)
     {
-        await LoadEntityAsync(id, cancellationToken);
-        return IsValidToDelete(CurrentEntity, out string errorMessage);
+        var entity = await LoadRequiredAsync(id, cancellationToken);
+        return IsValidToDelete(entity, out _);
     }
 
-    public virtual Task<Stream> ExportFile<TResult>(ExportConfiguration config, object oDataQueryOptions,
-        Expression<Func<TEntity, bool>> fixCriteria = null,
-        string[] includeProperties = null, CancellationToken cancellationToken = default)
-        where TResult : class
+    /// <inheritdoc />
+    public virtual async Task<bool> CanDelete(TKey id, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
     {
-        throw new NotImplementedException();
-    }
-
-    public virtual async Task<bool> CanDelete(IEnumerable<TKey> ids, CancellationToken cancellationToken)
-    {
-        var entities = await CurrentRepository.GetAsync(filter: e => ids.Contains(GetKey(e)),
-            cancellationToken: cancellationToken);
-        var errors = new Dictionary<TKey, (bool CanDelete, string Error)>();
-        string currentErrorMessage;
-        bool canDelete = true;
-        foreach (var entity in entities)
+        if (scope == null)
         {
-            canDelete = IsValidToDelete(entity, out currentErrorMessage);
-            errors.Add(GetKey(entity), (canDelete, currentErrorMessage));
+            return await CanDelete(id, cancellationToken);
         }
 
-        return true;
+        return IsValidToDelete(await LoadRequiredAsync(id, scope, cancellationToken), out _);
     }
 
+    /// <inheritdoc />
+    public virtual async Task<bool> CanDelete(IEnumerable<TKey> ids, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+    {
+        if (scope == null)
+        {
+            return await CanDelete(ids, cancellationToken);
+        }
+
+        var entities = await LoadByKeysAsync(ids, scope, cancellationToken);
+        return entities.All(e => IsValidToDelete(e, out _));
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<IEnumerable<TEntity>> Delete(IEnumerable<TKey> ids, Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+    {
+        if (scope == null)
+        {
+            return await Delete(ids, cancellationToken);
+        }
+
+        return await DeleteLoadedAsync(await LoadByKeysAsync(ids, scope, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>
+    /// Validates the delete of several entities. Entities that do not exist are not part of the result.
+    /// </summary>
+    /// <param name="ids">Entity keys</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>One entry per found entity: key, whether it can be deleted and the reason when not</returns>
+    public virtual async Task<IReadOnlyList<(TKey Id, bool CanDelete, string Error)>> GetDeleteValidationAsync(
+        IEnumerable<TKey> ids, CancellationToken cancellationToken = default)
+    {
+        var entities = await LoadByKeysAsync(ids, cancellationToken);
+        var results = new List<(TKey, bool, string)>();
+        foreach (var entity in entities)
+        {
+            var canDelete = IsValidToDelete(entity, out var error);
+            results.Add((GetKey(entity), canDelete, error));
+        }
+
+        return results;
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<bool> CanDelete(IEnumerable<TKey> ids, CancellationToken cancellationToken)
+    {
+        var validation = await GetDeleteValidationAsync(ids, cancellationToken);
+        return validation.All(v => v.CanDelete);
+    }
+
+    /// <inheritdoc />
     public virtual async Task<IEnumerable<TEntity>> Delete(IEnumerable<TKey> ids, CancellationToken cancellationToken)
     {
-        var entities = await CurrentRepository.GetAsync(filter: e => ids.Contains(GetKey(e)),
-            cancellationToken: cancellationToken);
-        var enumerable = entities as TEntity[] ?? entities.ToArray();
+        return await DeleteLoadedAsync(await LoadByKeysAsync(ids, cancellationToken), cancellationToken);
+    }
+
+    private async Task<IEnumerable<TEntity>> DeleteLoadedAsync(TEntity[] enumerable, CancellationToken cancellationToken)
+    {
+        foreach (var entity in enumerable)
+        {
+            if (!IsValidToDelete(entity, out var errorMessage))
+                throw new ApiException($"Can't delete {typeof(TEntity).Name} '{GetKey(entity)}'. {errorMessage}", errorNumber: 3002, statusCode: HttpStatusCode.BadRequest);
+        }
+
         await PreDelete(enumerable, cancellationToken);
         foreach (var entity in enumerable)
         {
@@ -201,128 +303,312 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return enumerable;
     }
 
+    private async Task<TEntity[]> LoadByKeysAsync(IEnumerable<TKey> ids, CancellationToken cancellationToken,
+        Expression<Func<TEntity, bool>>? scope = null)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        var keys = ids.Distinct().ToList();
+        if (keys.Count == 0)
+        {
+            return Array.Empty<TEntity>();
+        }
+
+        // one IN list (or, without store metadata, a bounded OR): Contains(GetKey(e)) cannot be translated to SQL
+        var predicate = PredicateBuilder.New(KeysPredicate(keys));
+        if (scope != null)
+        {
+            predicate = predicate.And(scope);
+        }
+
+        var entities = await CurrentRepository.GetAsync(filter: predicate, cancellationToken: cancellationToken);
+        return entities as TEntity[] ?? entities.ToArray();
+    }
+
+    // The scope is part of the query, not a check on the keys beforehand: a key that is not unique across scopes loads only the
+    // rows inside it. Every key must find at least one of them, otherwise the whole request is a 404 and nothing is touched.
+    private async Task<TEntity[]> LoadByKeysAsync(IEnumerable<TKey> ids, Expression<Func<TEntity, bool>> scope, CancellationToken cancellationToken)
+    {
+        var keys = ids.Distinct().ToList();
+        var entities = await LoadByKeysAsync(keys, cancellationToken, scope);
+        var found = new HashSet<TKey>(entities.Select(GetKey));
+        if (keys.Any(k => !found.Contains(k)))
+        {
+            throw new ApiException($"{typeof(TEntity).Name} was not found.", errorNumber: 1404, statusCode: HttpStatusCode.NotFound, code: "NotFound");
+        }
+
+        return entities;
+    }
+
+    // looked up together with the scope; the entity becomes CurrentEntity like any other load
+    private async Task<TEntity> LoadRequiredAsync(TKey id, Expression<Func<TEntity, bool>> scope, CancellationToken cancellationToken)
+    {
+        var entity = await CurrentRepository.FirstOrDefaultAsync(filter: PredicateBuilder.New(ResolveKeyPredicate(id)).And(scope),
+            includeProperties: IncludeProperties.Distinct().ToArray(), cancellationToken: cancellationToken)
+            ?? throw NotFound(id);
+        PopulateAdditionalProperties(entity);
+        CurrentEntity = entity;
+        return entity;
+    }
+
     #endregion
 
     #region Update Methods
 
     /// <summary>
-    ///  Update Entity 
+    ///  Update Entity: copies the values of <paramref name="entity"/> onto the stored entity and saves.
     /// </summary>
-    /// <param name="id"></param>
-    /// <param name="entity"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
+    /// <param name="id">Entity key</param>
+    /// <param name="entity">New values</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     public virtual async Task<TEntity> Update(TKey id, TEntity entity,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(entity);
+        if (!EqualityComparer<TKey>.Default.Equals(GetKey(entity), id))
+            throw new ApiException($"Failed to Update {typeof(TEntity).Name} '{id}'. The key in the body does not match the key in the route.", errorNumber: 4003, statusCode: HttpStatusCode.BadRequest);
         var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
-        await LoadEntityAsync(id, cancellationToken, includeProperties);
-        //AutoMapper.Mapper.Map<TEntity, TEntity>(entity, this.CurrentEntity);
-        if (!IsValidToUpdate(entity, out string errorMessage))
-            throw new ApiException($"Failed to Update {CurrentEntity.ToString()}. {errorMessage}", errorNumber: 4001);
-        await PreUpdate(CurrentEntity, entity, cancellationToken);
-        entity.CopyObject<TEntity>(CurrentEntity, "IsEnabled");
-        //var updatedEntity = await CurrentRepository.UpdateAsync(entity, cancellationToken);
+        var current = await LoadRequiredAsync(id, cancellationToken, includeProperties);
+        if (!IsValidToUpdate(entity, out var errorMessage))
+            throw new ApiException($"Failed to Update {typeof(TEntity).Name} '{id}'. {errorMessage}", errorNumber: 4001, statusCode: HttpStatusCode.BadRequest);
+        await PreUpdate(current, entity, cancellationToken);
+        entity.CopyObject(current, "IsEnabled");
+        var updated = await CurrentRepository.UpdateAsync(current, cancellationToken) ?? current;
         await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
-        await PostUpdate(CurrentEntity, cancellationToken);
-        return CurrentEntity;
+        await PostUpdate(updated, cancellationToken);
+        return updated;
     }
 
     /// <summary>
-    /// Update entity after process patch json on entity object
+    /// Update entity after process patch json on entity object. A thin wrapper: <see cref="UpdateChangesCore"/> does the work and
+    /// is the extension point (override that, not this method: the scoped overload runs only the core, inside a transaction).
     /// </summary>
     /// <param name="id">entity identifier</param>
     /// <param name="entity">updated object</param>
     /// <param name="cancellationToken">cancellation token</param>
-    /// <returns></returns>
     /// <exception cref="ApiException"></exception>
     public virtual async Task<TEntity> UpdateChanges(TKey id, TEntity entity, CancellationToken cancellationToken)
     {
-        var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
-        if(CurrentEntity == null || !GetKeyPredicate(id).Invoke(CurrentEntity))
-            await LoadEntityAsync(id, cancellationToken, includeProperties);
-        
-        if (!IsValidToUpdate(CurrentEntity, out string errorMessage))
-            throw new ApiException($"Failed to Update {CurrentEntity.ToString()}. {errorMessage}.", errorNumber: 4002);
-        await PreUpdate(CurrentEntity, entity, cancellationToken);
-        
-        var updatedEntity = await CurrentRepository.UpdateAsync(CurrentEntity, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
-        await PostUpdate(updatedEntity, cancellationToken);
-        return updatedEntity;
+        var updated = await UpdateChangesCore(id, entity, null, cancellationToken);
+        await PostUpdate(updated, cancellationToken);
+        return updated;
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<TEntity> UpdateChanges(TKey id, TEntity entity, Expression<Func<TEntity, bool>>? scope,
+        CancellationToken cancellationToken)
+    {
+        if (scope == null)
+        {
+            return await UpdateChanges(id, entity, cancellationToken);
+        }
+
+        // The scoped path runs UpdateChangesCore, never the 3-argument method, so an override of that method would be skipped
+        // silently (its business rule or audit would not run). Fail closed and say where the extension point is.
+        if (OverridesUpdateChanges(GetType()))
+        {
+            throw new ApiException(
+                $"{GetType().Name} overrides UpdateChanges(id, entity, cancellationToken), which the scoped update does not call. " +
+                "Override UpdateChangesCore instead; nothing was updated.",
+                statusCode: HttpStatusCode.InternalServerError, code: "UPDATECHANGES_OVERRIDDEN");
+        }
+
+        // Save inside a transaction, ask the database whether the entity is still in scope (foreign keys and
+        // navigations count there) and roll everything back when it is not. The unit of work runs the whole unit
+        // through the provider's execution strategy, so retrying strategies (SQL Server, Npgsql) work too.
+        // PostUpdate runs after the commit: a side effect must not fire for a change that can still be rolled back.
+        // A retry starts from the database: the entity is reloaded inside the scope and only the properties the patch changed
+        // are applied to it (see ReapplyAsync), so a rolled-back concurrency token or a concurrent writer's columns are not lost.
+        var (patched, replayable) = SnapshotPatch(entity);
+        var attempt = 0;
+        var updated = await _unitOfWork.ExecuteInTransactionAsync(
+            ct => attempt++ == 0 ? UpdateChangesCore(id, entity, scope, ct) : ReapplyAsync(id, patched, replayable, scope, ct),
+            cancellationToken);
+        await PostUpdate(updated, cancellationToken);
+        return updated;
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> UpdateChangesOverrides = new();
+
+    private static bool OverridesUpdateChanges(Type serviceType) =>
+        UpdateChangesOverrides.GetOrAdd(serviceType, type => type.GetMethod(nameof(UpdateChanges),
+            new[] { typeof(TKey), typeof(TEntity), typeof(CancellationToken) })?.DeclaringType != typeof(BaseService<TEntity, TKey>));
+
+    // The properties the patch changed on the tracked entity (name and new value) and whether a retry can replay the whole
+    // change from them. Anything else in the tracker (owned or dependent entries, added or deleted rows, collection changes) or a
+    // changed property without a CLR setter (shadow) would be lost when the tracker is cleared for the retry, so the change is
+    // marked not replayable and the retry fails closed instead of committing a smaller change than the first attempt.
+    private (Dictionary<string, object?> Values, bool Replayable) SnapshotPatch(TEntity entity)
+    {
+        var changes = _unitOfWork.GetChanges();
+        var changed = new Dictionary<string, object?>();
+        var replayable = changes.All(c => ReferenceEquals(c.Entity, entity) && c.State == "Modified");
+        var change = changes.FirstOrDefault(c => ReferenceEquals(c.Entity, entity));
+        if (change == null)
+        {
+            return (changed, replayable);
+        }
+
+        foreach (var (name, value) in change.CurrentValues)
+        {
+            if (change.OriginalValues.TryGetValue(name, out var original) && Equals(original, value))
+            {
+                continue;
+            }
+
+            changed[name] = value;
+            if (typeof(TEntity).GetProperty(name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance) is not { CanWrite: true })
+            {
+                replayable = false;
+            }
+        }
+
+        return (changed, replayable);
+    }
+
+    private async Task<TEntity> ReapplyAsync(TKey id, Dictionary<string, object?> patched, bool replayable,
+        Expression<Func<TEntity, bool>> scope, CancellationToken cancellationToken)
+    {
+        if (!replayable)
+        {
+            // never report done what was not done: the first attempt failed and was rolled back, and this change (owned or child
+            // rows, collections, shadow properties) cannot be rebuilt from the property values alone
+            throw new ApiException(
+                "A transient failure interrupted the update and it was NOT applied. Send the request again.",
+                statusCode: HttpStatusCode.ServiceUnavailable, code: "RETRY_NOT_REPLAYABLE");
+        }
+
+        var current = await LoadRequiredAsync(id, scope, cancellationToken);
+        foreach (var (name, value) in patched)
+        {
+            var property = typeof(TEntity).GetProperty(name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            if (property is { CanWrite: true })
+            {
+                property.SetValue(current, value);
+            }
+        }
+
+        // the retry goes through the same virtual extension point as the first attempt, so an override (business rule,
+        // authorisation, audit) runs on every attempt; the fresh load is CurrentEntity, which the core then uses
+        CurrentEntity = current;
+        return await UpdateChangesCore(id, current, scope, cancellationToken);
     }
 
     /// <summary>
-    /// Update Entity property 
+    /// The update without <c>PostUpdate</c>: load, validate, <c>PreUpdate</c>, save and, when a scope is
+    /// given, check in the database that the entity is still inside it. This is the extension point of the update: both
+    /// <c>UpdateChanges</c> overloads run it. It may run again after a transient failure, on a fresh load (see the remarks).
     /// </summary>
-    /// <param name="id"></param>
-    /// <param name="entity"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
+    /// <remarks>
+    /// Under a retrying execution strategy a failed attempt is rolled back and the scoped update continues on a reload of the
+    /// entity with only the properties the patch changed; <c>PreUpdate</c>, <c>IsValidToUpdate</c> and any override of this method run again, so keep them repeatable.
+    /// </remarks>
+    /// <param name="id">Entity identifier</param>
+    /// <param name="entity">Updated object</param>
+    /// <param name="scope">Scope the entity must still satisfy after the save, or null</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    protected virtual async Task<TEntity> UpdateChangesCore(TKey id, TEntity entity,
+        Expression<Func<TEntity, bool>>? scope, CancellationToken cancellationToken)
+    {
+        var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
+        var current = CurrentEntity != null && EqualityComparer<TKey>.Default.Equals(GetKey(CurrentEntity), id)
+            ? CurrentEntity
+            : await LoadRequiredAsync(id, cancellationToken, includeProperties);
+
+        if (!IsValidToUpdate(current, out var errorMessage))
+            throw new ApiException($"Failed to Update {typeof(TEntity).Name} '{id}'. {errorMessage}.", errorNumber: 4002, statusCode: HttpStatusCode.BadRequest);
+        await PreUpdate(current, entity, cancellationToken);
+
+        var updatedEntity = await CurrentRepository.UpdateAsync(current, cancellationToken) ?? current;
+        await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
+        if (scope != null && !await StillInScopeAsync(id, scope, cancellationToken))
+            throw NotFound(id);
+        return updatedEntity;
+    }
+
+    private async Task<bool> StillInScopeAsync(TKey id, Expression<Func<TEntity, bool>> scope, CancellationToken cancellationToken) =>
+        await CurrentRepository.AnyAsync(PredicateBuilder.New(ResolveKeyPredicate(id)).And(scope),
+            QueryFlags.DisableTracking, cancellationToken);
+
+    /// <summary>
+    /// Update Entity property
+    /// </summary>
+    /// <param name="id">Entity key</param>
+    /// <param name="entity">The patch document</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     public virtual async Task<TEntity> Update(TKey id, JsonPatchDocument<TEntity> entity,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(entity);
+        EnsurePatchable(entity);
         var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
-        await LoadEntityAsync(id, cancellationToken, includeProperties);
+        var current = await LoadRequiredAsync(id, cancellationToken, includeProperties);
 
-        if (!IsValidToUpdate(CurrentEntity, out string errorMessage))
-            throw new ApiException($"Failed to Update {CurrentEntity.ToString()}. {errorMessage}.", errorNumber: 4002);
-        await PreUpdate(CurrentEntity, entity, cancellationToken);
-        entity.ApplyTo(CurrentEntity, error =>
+        if (!IsValidToUpdate(current, out var errorMessage))
+            throw new ApiException($"Failed to Update {typeof(TEntity).Name} '{id}'. {errorMessage}.", errorNumber: 4002, statusCode: HttpStatusCode.BadRequest);
+        await PreUpdate(current, entity, cancellationToken);
+        entity.ApplyTo(current, error =>
         {
             if (error.Operation.OperationType != OperationType.Test &&
                 error.Operation.OperationType != OperationType.Invalid)
             {
-                this.HandleJsonOperator(error.Operation, error.AffectedObject);
+                HandleJsonOperator(error.Operation, error.AffectedObject);
             }
         });
-        var updatedEntity = await CurrentRepository.UpdateAsync(CurrentEntity, cancellationToken);
+        EnsureExtraPropertiesWithinLimits(current);
+        var updatedEntity = await CurrentRepository.UpdateAsync(current, cancellationToken) ?? current;
         await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
         await PostUpdate(updatedEntity, cancellationToken);
         return updatedEntity;
     }
 
-
     /// <summary>
-    /// Update if pass json object 
+    /// Update if pass json object: only the properties present in the JSON change.
     /// </summary>
-    /// <param name="id"></param>
-    /// <param name="entity"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
+    /// <param name="id">Entity key</param>
+    /// <param name="entity">Partial entity as JSON</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     public virtual async Task<TEntity> Update(TKey id, JsonObject entity,
         CancellationToken cancellationToken = default)
     {
-        var includeProeprties = GetIncludedProperties(entity, IgnoredProperties);
-        await LoadEntityAsync(id, cancellationToken, includeProeprties);
-        if (!IsValidToUpdate(CurrentEntity, out string errorMessage))
-            throw new ApiException($"Failed to Update {CurrentEntity.ToString()}. {errorMessage}.", errorNumber: 4002);
-        await PreUpdate(CurrentEntity, entity, cancellationToken);
-        entity.Populate<TEntity>(CurrentEntity);
-        var updatedEntity = await CurrentRepository.UpdateAsync(CurrentEntity, cancellationToken);
+        ArgumentNullException.ThrowIfNull(entity);
+        EnsurePatchable(entity);
+        var includeProperties = GetIncludedProperties(entity, IgnoredProperties);
+        var current = await LoadRequiredAsync(id, cancellationToken, includeProperties);
+        if (!IsValidToUpdate(current, out var errorMessage))
+            throw new ApiException($"Failed to Update {typeof(TEntity).Name} '{id}'. {errorMessage}.", errorNumber: 4002, statusCode: HttpStatusCode.BadRequest);
+        await PreUpdate(current, entity, cancellationToken);
+        entity.Populate(current, IsProtectedProperty);
+        EnsureExtraPropertiesWithinLimits(current); // the bag is merged key by key above; check what it holds now
+        var updatedEntity = await CurrentRepository.UpdateAsync(current, cancellationToken) ?? current;
         await _unitOfWork.SaveChangesAsync(cancellationToken: cancellationToken);
         await PostUpdate(updatedEntity, cancellationToken);
         return updatedEntity;
     }
 
     /// <summary>
-    /// Validate if can update entity 
+    /// Validate if can update entity
     /// </summary>
-    /// <param name="entity"></param>
-    /// <param name="validationErrorMessage"></param>
-    /// <returns></returns>
+    /// <param name="entity">The entity</param>
+    /// <param name="validationErrorMessage">Reason when invalid</param>
     public virtual bool IsValidToUpdate(TEntity? entity, out string validationErrorMessage)
     {
         validationErrorMessage = string.Empty;
         return true;
     }
 
+    /// <summary>Runs after an update was saved.</summary>
+    /// <param name="entity">The updated entity</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     public virtual Task PostUpdate(TEntity entity,
         CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
     }
 
+    /// <summary>Runs before an update with a full entity.</summary>
+    /// <param name="current">The stored entity</param>
+    /// <param name="entity">The new values</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     public virtual Task PreUpdate(TEntity current, TEntity entity,
         CancellationToken cancellationToken = default)
     {
@@ -335,7 +621,6 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     /// <param name="current">current unchanged entity</param>
     /// <param name="entity">updated json entity</param>
     /// <param name="cancellationToken">cancellation token</param>
-    /// <returns></returns>
     public virtual Task PreUpdate(TEntity current, JsonObject entity,
         CancellationToken cancellationToken = default)
     {
@@ -343,12 +628,11 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
     }
 
     /// <summary>
-    /// 
+    /// Action can do before a JSON patch is applied
     /// </summary>
-    /// <param name="current"></param>
-    /// <param name="entity"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
+    /// <param name="current">The stored entity</param>
+    /// <param name="entity">The patch document</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     public virtual Task PreUpdate(TEntity current, JsonPatchDocument<TEntity> entity,
         CancellationToken cancellationToken = default)
     {
@@ -357,24 +641,156 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
 
     #endregion
 
+    /// <summary>Whether a client may not change the property; override to protect more (a tenant column, for example).</summary>
+    /// <param name="propertyName">Property name as sent by the client</param>
+    protected virtual bool IsProtectedProperty(string propertyName) => EntityPropertyGuard.IsProtected(typeof(TEntity), propertyName);
+
+    /// <inheritdoc />
+    public virtual void EnsurePatchable(JsonPatchDocument<TEntity> changes)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        foreach (var operation in changes.Operations)
+        {
+            var value = operation.value is Newtonsoft.Json.Linq.JToken token ? token.ToClrValue() : operation.value;
+            EnsurePathPatchable(operation.path, value);
+            EnsurePathPatchable(operation.from, null);
+        }
+    }
+
     /// <summary>
-    /// Handle Json Patch Operation
+    /// Whether a client may not change a property the scope is defined on. Override to return false to allow it (the
+    /// caller then owns the risk of moving an entity between scopes).
     /// </summary>
-    /// <param name="op"></param>
-    /// <param name="targetObj"></param>
+    /// <param name="propertyName">CLR property name</param>
+    /// <param name="scopeMembers">Members of the entity the scope refers to, with the foreign keys of the navigations among them</param>
+    protected virtual bool IsScopeDefiningProperty(string propertyName, IReadOnlySet<string> scopeMembers) =>
+        scopeMembers.Contains(propertyName);
+
+    /// <inheritdoc />
+    public virtual void EnsurePatchable(JsonPatchDocument<TEntity> changes, Expression<Func<TEntity, bool>>? scope)
+    {
+        EnsurePatchable(changes);
+        var members = ScopeMemberFinder.Find(scope, typeof(TEntity));
+        if (members.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var operation in changes.Operations)
+        {
+            EnsureNotScopeDefining(operation.path, members);
+            EnsureNotScopeDefining(operation.from, members);
+        }
+    }
+
+    /// <inheritdoc />
+    public virtual void EnsurePatchable(JsonObject changes, Expression<Func<TEntity, bool>>? scope)
+    {
+        EnsurePatchable(changes);
+        var members = ScopeMemberFinder.Find(scope, typeof(TEntity));
+        if (members.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (name, _) in changes)
+        {
+            EnsureNotScopeDefining(name, members);
+        }
+    }
+
+    private void EnsureNotScopeDefining(string? pathOrName, IReadOnlySet<string> members)
+    {
+        var first = pathOrName?.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Replace("~1", "/").Replace("~0", "~");
+        if (first == null)
+        {
+            return;
+        }
+
+        var name = EntityPropertyGuard.ResolveProperty(typeof(TEntity), first)?.Name ?? first;
+        if (IsScopeDefiningProperty(name, members))
+        {
+            throw Protected(name);
+        }
+    }
+
+    /// <inheritdoc />
+    public virtual void EnsurePatchable(JsonObject changes)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        foreach (var (name, _) in changes)
+        {
+            EnsureNamePatchable(name);
+        }
+    }
+
+    /// <inheritdoc />
+    public virtual void EnsureExtraPropertiesWithinLimits(TEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        EntityPropertyGuard.EnsureWithinLimits(entity.ExtraProperties);
+    }
+
+    /// <inheritdoc />
+    public virtual void ApplyJson(JsonObject changes, TEntity entity) => changes.Populate(entity, IsProtectedProperty);
+
+    // JSON pointer: segments are separated by '/', "~1" is a '/' and "~0" a '~' inside a segment
+    private void EnsurePathPatchable(string? path, object? value)
+    {
+        var segments = path?.Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Replace("~1", "/").Replace("~0", "~")).ToArray();
+        if (segments is not { Length: > 0 })
+        {
+            return;
+        }
+
+        EnsureNamePatchable(segments[0]);
+        if (segments[0].Equals(nameof(IEntity.ExtraProperties), StringComparison.OrdinalIgnoreCase)
+            || EntityPropertyGuard.ResolveProperty(typeof(TEntity), segments[0])?.Name == nameof(IEntity.ExtraProperties))
+        {
+            // the bag is changed key by key, with the limits; replacing it as a whole would bypass them
+            if (segments.Length == 1)
+            {
+                throw Protected(segments[0]);
+            }
+
+            if (value != null)
+            {
+                EntityPropertyGuard.EnsureExtraPropertyAllowed(new Dictionary<string, object?>(), segments[1], value);
+            }
+        }
+    }
+
+    // the protection rule runs on the CLR property the client name binds to, never on the client's spelling
+    private void EnsureNamePatchable(string clientName)
+    {
+        var property = EntityPropertyGuard.ResolveProperty(typeof(TEntity), clientName);
+        if (IsProtectedProperty(property?.Name ?? clientName))
+        {
+            throw Protected(property?.Name ?? clientName);
+        }
+    }
+
+    private static ApiException Protected(string name) =>
+        new($"The property '{name}' cannot be changed this way.", errorNumber: 4004, statusCode: HttpStatusCode.BadRequest, code: "PROTECTED_PROPERTY");
+
+    /// <summary>
+    /// Handle Json Patch Operation for a path that is not a property of the entity: the value goes to
+    /// <see cref="IEntity.ExtraProperties"/> (add and replace assign the value, remove deletes it).
+    /// </summary>
+    /// <param name="op">The operation</param>
+    /// <param name="targetObj">The object the operation was applied to</param>
     public virtual void HandleJsonOperator(Operation op, object? targetObj)
     {
-        object? currentObj = targetObj;
+        var currentObj = targetObj;
 
-        string propPath = string.Empty;
+        var propPath = string.Empty;
         var propPaths = op.path.Split('/');
         var addToExtraProperties = false;
-        for (int i = 1; i < propPaths.Length; i++)
+        for (var i = 1; i < propPaths.Length; i++)
         {
-            //TODO can be enhanced
             propPath = propPaths[i];
-            // TODO Check if the path is number then get index
-            IEnumerable<PropertyInfo?> props = currentObj?.GetType()?.GetProperties()?.Where(p => p.PropertyType.IsPublic)!;
+            var props = currentObj?.GetType().GetProperties().Where(p => p.PropertyType.IsPublic);
             var propInfo = props?.FirstOrDefault(p => p.Name.Equals(propPath, StringComparison.CurrentCultureIgnoreCase));
             // check if propPath not available in object and children
             if (propInfo != null)
@@ -389,37 +805,31 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         }
 
         // if not available then check if object have attribute Json.. and IDictionary or just inherited from  IEntity
-        if (addToExtraProperties && currentObj is IEntity)
+        if (addToExtraProperties && currentObj is IEntity entityObj)
         {
-            var entityObj = (IEntity)currentObj;
-            // then process operation based on type
+            var value = op.value is Newtonsoft.Json.Linq.JToken token ? token.ToClrValue() : op.value;
+            if (op.OperationType is OperationType.Add or OperationType.Replace)
+            {
+                EntityPropertyGuard.EnsureExtraPropertyAllowed(entityObj.ExtraProperties, propPath, value);
+            }
+
             switch (op.OperationType)
             {
                 case OperationType.Add:
-                    entityObj.ExtraProperties.Add(propPath, op.value);
+                case OperationType.Replace:
+                    // RFC 6902: add replaces an existing member
+                    entityObj.ExtraProperties[propPath] = value;
                     break;
                 case OperationType.Remove:
-                    if (entityObj.ExtraProperties.ContainsKey(propPath))
-                    {
-                        entityObj.ExtraProperties.Remove(propPath);
-                    }
-
-                    break;
-                case OperationType.Replace:
-                    if (entityObj.ExtraProperties.ContainsKey(propPath))
-                    {
-                        entityObj.ExtraProperties[propPath] = op.value;
-                    }
-                    else
-                    {
-                        entityObj.ExtraProperties.Add(propPath, op.value);
-                    }
-
+                    entityObj.ExtraProperties.Remove(propPath);
                     break;
             }
         }
     }
 
+    /// <summary>Navigation properties of the client entity that must be loaded before it is applied.</summary>
+    /// <param name="fromClient">Entity sent by the client</param>
+    /// <param name="ignoredProperties">Properties never included; null means none</param>
     protected virtual string[] GetIncludedProperties(TEntity fromClient, params string[]? ignoredProperties)
     {
         var properties = new List<string>();
@@ -434,8 +844,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             || (prop.PropertyType != typeof(string) && prop.PropertyType.IsClass &&
                 prop.PropertyType.IsSubclassOf(typeof(Entity)))
         );
-        if (ignoredProperties == null)
-            ignoredProperties = new string[] { };
+        ignoredProperties ??= Array.Empty<string>();
 
         foreach (var prop in entityProps)
         {
@@ -449,14 +858,20 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return properties.ToArray();
     }
 
-    protected virtual string[] GetIncludedProperties(JsonObject fromClient, params string[] ignoredProperties)
+    /// <summary>Navigation properties present in the client JSON that must be loaded.</summary>
+    /// <param name="fromClient">JSON sent by the client</param>
+    /// <param name="ignoredProperties">Properties never included; null means none</param>
+    protected virtual string[] GetIncludedProperties(JsonObject fromClient, params string[]? ignoredProperties)
     {
         var properties = GetJsonObjectProps(fromClient, "", GetProperties(typeof(TEntity)), ignoredProperties);
         return properties.ToArray();
     }
 
+    /// <summary>Navigation properties named by the operations of a patch document.</summary>
+    /// <param name="fromClient">Patch document sent by the client</param>
+    /// <param name="ignoredProperties">Properties never included; null means none</param>
     protected virtual string[] GetIncludedProperties(JsonPatchDocument<TEntity> fromClient,
-        params string[] ignoredProperties)
+        params string[]? ignoredProperties)
     {
         var props = typeof(TEntity).GetProperties();
         var entityProps = props.Where(p => IsReferenceProperty(p.PropertyType)).Select(p => p.Name).ToList();
@@ -464,18 +879,24 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             .ToArray();
     }
 
+    /// <summary>Include paths for a JSON patch path.</summary>
+    /// <param name="path">The patch path</param>
+    /// <param name="entityProps">Reference property names of the entity</param>
+    /// <param name="ignoredProperties">Properties never included; null means none</param>
     protected virtual string[] GetPropertyPath(string path, IList<string> entityProps,
         params string[]? ignoredProperties)
     {
         var propPath = string.Empty;
         var paths = new List<string>();
         var props = path.Split('/');
+        ignoredProperties ??= Array.Empty<string>();
 
-        for (int i = 1; i < props.Length; i++)
+        for (var i = 1; i < props.Length; i++)
         {
             var prop = props[i];
-            prop = prop.First().ToString().ToUpper() + prop.Substring(1);
-            if (ignoredProperties != null && !ignoredProperties.Contains(prop) && !int.TryParse(prop, out int dummy) && entityProps.Contains(prop))
+            if (prop.Length == 0) continue;
+            prop = prop.FirstCharToUpper();
+            if (!ignoredProperties.Contains(prop) && !int.TryParse(prop, out _) && entityProps.Contains(prop))
             {
                 propPath += prop;
                 paths.Add(propPath);
@@ -489,70 +910,62 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return paths.ToArray();
     }
 
+    /// <summary>Reference properties of a property's type.</summary>
+    /// <param name="parentProp">The property</param>
     protected virtual IList<PropertyInfo> GetProperties(PropertyInfo parentProp)
     {
         var props = parentProp.PropertyType.GetProperties();
         return props.Where(p => IsReferenceProperty(p.PropertyType)).ToList();
     }
 
+    /// <summary>Reference properties of a type.</summary>
+    /// <param name="parentType">The type</param>
     protected virtual IList<PropertyInfo> GetProperties(Type parentType)
     {
         var props = parentType.GetProperties();
         return props.Where(p => IsReferenceProperty(p.PropertyType)).ToList();
     }
 
+    /// <summary>Include paths for the reference properties present in a JSON object.</summary>
+    /// <param name="fromClient">The JSON object</param>
+    /// <param name="parentPath">Path so far</param>
+    /// <param name="entityProps">Reference properties at this level</param>
+    /// <param name="ignoredProperties">Properties never included; null means none</param>
     protected virtual List<string> GetJsonObjectProps(JsonObject? fromClient, string parentPath,
         IList<PropertyInfo> entityProps, string[]? ignoredProperties = null)
     {
         var properties = new List<string>();
         if (fromClient == null) return properties;
-        // should filter by entity type too
-        var jObjProps = fromClient.ToList();
-        KeyValuePair<string, JsonNode> jObjProp;
-        string jPropName;
-        string path;
-        PropertyInfo? objPropInfo;
-        foreach (var t in jObjProps)
+        ignoredProperties ??= Array.Empty<string>();
+        foreach (var (name, value) in fromClient.ToList())
         {
-            jObjProp = t;
-            jPropName = jObjProp.Key.First().ToString().ToUpper() + jObjProp.Key.Substring(1);
-            path = string.IsNullOrEmpty(parentPath) ? jPropName : $"{parentPath}.{jPropName}";
-            objPropInfo =
+            if (name.Length == 0) continue;
+            var jPropName = name.FirstCharToUpper();
+            var path = string.IsNullOrEmpty(parentPath) ? jPropName : $"{parentPath}.{jPropName}";
+            var objPropInfo =
                 entityProps.FirstOrDefault(p => p.Name.Equals(jPropName, StringComparison.CurrentCultureIgnoreCase));
-            if (
-                (jObjProp.Value is JsonObject || jObjProp.Value is JsonArray)
-                && objPropInfo != null
-                && ignoredProperties != null &&!ignoredProperties.Contains(jPropName))
+            if (objPropInfo == null || ignoredProperties.Contains(jPropName)) continue;
+
+            if (value is JsonObject jsonObject)
             {
-                if (jObjProp.Value is JsonObject)
+                properties.Add(path);
+                properties.AddRange(GetJsonObjectProps(jsonObject, path, GetProperties(objPropInfo), ignoredProperties));
+            }
+            else if (value is JsonArray jArray)
+            {
+                properties.Add(path);
+                foreach (var jToken in jArray)
                 {
-                    properties.Add(path);
-
-                    properties.AddRange(GetJsonObjectProps(jObjProp.Value as JsonObject, path, GetProperties(objPropInfo),
-                        ignoredProperties));
-                }
-                else if (jObjProp.Value is JsonArray)
-                {
-                    properties.Add(path);
-                    var jArray = jObjProp.Value as JsonArray;
-
-                    if (jArray != null)
-                        foreach (var jToken in jArray)
-                        {
-                            if (jToken is JsonObject token)
-                            {
-                                properties.AddRange(
-                                    GetJsonObjectProps(
-                                        token, path,
-                                        objPropInfo.PropertyType.IsConstructedGenericType
-                                            ? GetProperties(objPropInfo.PropertyType.GenericTypeArguments.First())
-                                            : new List<PropertyInfo>(),
-                                        ignoredProperties)
-                                );
-                            }
-
-                            //TODO handle case array in array
-                        }
+                    if (jToken is JsonObject token)
+                    {
+                        properties.AddRange(
+                            GetJsonObjectProps(
+                                token, path,
+                                objPropInfo.PropertyType.IsConstructedGenericType
+                                    ? GetProperties(objPropInfo.PropertyType.GenericTypeArguments.First())
+                                    : new List<PropertyInfo>(),
+                                ignoredProperties));
+                    }
                 }
             }
         }
@@ -560,27 +973,30 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return properties;
     }
 
+    /// <summary>Whether a type belongs to the same root namespace as the service (an entity reference).</summary>
+    /// <param name="prop">The type</param>
     protected virtual bool IsReferenceProperty(Type prop)
     {
-        var ns = this.GetType().Namespace;
+        var ns = GetType().Namespace;
         if (ns == null) return false;
         var currentNamespace = ns.Split('.').First();
         if (prop.IsConstructedGenericType &&
-            prop.GenericTypeArguments.Any(g => g.Namespace.StartsWith(currentNamespace)))
+            prop.GenericTypeArguments.Any(g => g.Namespace?.StartsWith(currentNamespace, StringComparison.Ordinal) == true))
         {
             return true;
         }
 
-        if (prop.Namespace == null || !prop.IsClass || (!prop.Namespace.StartsWith(currentNamespace))) return false;
-        return true;
+        return prop.Namespace != null && prop.IsClass && prop.Namespace.StartsWith(currentNamespace, StringComparison.Ordinal);
     }
 
+    /// <summary>Whether a type is a primitive-like value.</summary>
+    /// <param name="type">The type</param>
     protected virtual bool IsPrimitive(Type type)
     {
         return type == typeof(string)
                || type == typeof(DateTime)
                || type == typeof(DateTime?)
                || type.IsPrimitive
-               || (Nullable.GetUnderlyingType(type) != null && Nullable.GetUnderlyingType(type).IsPrimitive);
+               || (Nullable.GetUnderlyingType(type)?.IsPrimitive ?? false);
     }
 }

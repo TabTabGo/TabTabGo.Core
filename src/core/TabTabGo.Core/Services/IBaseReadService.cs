@@ -24,7 +24,7 @@ public interface IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
     /// <param name="flags">query flags</param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity?, bool>> query, string[]? includeProperties = null, 
+    Task<IEnumerable<TEntity>> GetList(Expression<Func<TEntity, bool>> query, string[]? includeProperties = null, 
         QueryFlags? flags = null,
         CancellationToken cancellationToken = default);
 
@@ -39,7 +39,7 @@ public interface IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
     /// <param name="flags"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task<PageList<TEntity>> GetPageList(Expression<Func<TEntity?, bool>> query,
+    Task<PageList<TEntity>> GetPageList(Expression<Func<TEntity, bool>> query,
         Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
         int page = 0, int pageSize = 25,
         string[]? includeProperties = null,
@@ -147,6 +147,28 @@ public interface IBaseReadService<TEntity, TKey> where TEntity : class, IEntity
         Expression<Func<TEntity, bool>>? fixCriteria = null,
         string[]? includeProperties = null,
         CancellationToken cancellationToken = default) where TResult : class;
+    /// <summary>
+    /// Counts how many of the keys exist inside the given scope (one query). Use it to check that a bulk request names
+    /// only entities the caller may reach. The default implementation looks the keys up one by one.
+    /// </summary>
+    /// <param name="ids">The keys</param>
+    /// <param name="fixCriteria">Scope criteria; null means no scope</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    async Task<int> CountByKeys(IEnumerable<TKey> ids, Expression<Func<TEntity, bool>>? fixCriteria = null,
+        CancellationToken cancellationToken = default)
+    {
+        var count = 0;
+        foreach (var id in ids.Distinct())
+        {
+            if (await GetByKey(id, fixCriteria: fixCriteria, cancellationToken: cancellationToken).ConfigureAwait(false) != null)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     /// <summary>
     /// Get the key predicate for the entity
     /// </summary>

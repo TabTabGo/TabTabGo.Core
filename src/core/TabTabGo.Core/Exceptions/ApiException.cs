@@ -70,7 +70,7 @@ public class ApiException : Exception
     /// <param name="errorNumber">Exception Error number</param>
     /// <param name="statusCode">Http response status code</param>
     /// <param name="code">System error code</param>
-    public ApiException(string message, Exception? inner = null, LogLevel level = LogLevel.Error, int? errorNumber = null, HttpStatusCode statusCode = HttpStatusCode.InternalServerError, string code = null)
+    public ApiException(string message, Exception? inner = null, LogLevel level = LogLevel.Error, int? errorNumber = null, HttpStatusCode statusCode = HttpStatusCode.InternalServerError, string? code = null)
         : base(message, inner)
     {
         if (inner != null)

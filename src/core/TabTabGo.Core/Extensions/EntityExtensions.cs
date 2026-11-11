@@ -1,92 +1,98 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using TabTabGo.Core.Entities;
+namespace TabTabGo.Core.Extensions;
 
-namespace TabTabGo.Core.Extensions
+/// <summary>
+/// Copy helpers for entities.
+/// </summary>
+public static class EntityExtensions
 {
-    public static class EntityExtensions
+    /// <summary>
+    /// Copies the public settable properties of <paramref name="type"/> from source to destination. Properties marked
+    /// with <see cref="IgnoreCopyAttribute"/>, listed in <paramref name="ignoredProperties"/>, collections and
+    /// properties without a public setter are skipped.
+    /// </summary>
+    public static void CopyObject(this object source, Type type, object destination,
+        params string[] ignoredProperties)
     {
-        public static void CopyObject(this object source, Type type, object destination,
-            params string[] ignoredProperties)
-        {
-            var publicProp = type;
-            var pubProps = publicProp.GetProperties();
-            foreach (var prop in pubProps)
-            {
-                var atts = prop.GetCustomAttributes<IgnoreCopyAttribute>();
-                if (atts.Any(a => a.IgnoreCopy)) continue;
-                if (ignoredProperties != null && ignoredProperties.Contains(prop.Name) &&
-                    prop.GetSetMethod() == null) continue;
-
-                if (prop.PropertyType.IsArray
-                    || (prop.PropertyType.IsGenericType &&
-                        prop.PropertyType.GetGenericTypeDefinition() == typeof(IEnumerable<>))
-                    || (prop.PropertyType.IsGenericType &&
-                        prop.PropertyType.GetGenericTypeDefinition() == typeof(ICollection<>))
-                )
-                {
-                    continue;
-                }
-
-                if (prop.PropertyType != typeof(string) && prop.PropertyType.IsClass &&
-                    prop.PropertyType.GetInterface("IEntity", true) == typeof(IEntity))
-                {
-                    var propAtts = prop.PropertyType.GetCustomAttributes<IgnoreCopyAttribute>();
-                    if (propAtts.Any(a => a.IgnoreCopy)) continue;
-
-                    var spObject = prop.GetValue(source);
-                    if (spObject == null) continue;
-
-                    var dpObject = prop.GetValue(destination);
-                    if (dpObject != null)
-                    {
-                        spObject.CopyObject(prop.PropertyType, dpObject, ignoredProperties);
-                        continue;
-                    }
-                }
-
-                var spValue = prop.GetValue(source);
-                var dpValue = prop.GetValue(destination);
-                if ((prop.PropertyType.IsPrimitive
-                     || prop.PropertyType == typeof(string)
-                     || prop.PropertyType == typeof(DateTime)
-                     || prop.PropertyType == typeof(DateTimeOffset))
-                    && spValue != dpValue)
-                {
-                    prop.SetValue(destination, spValue);
-                    continue;
-                }
-
-                prop.SetValue(destination, spValue);
-            }
-        }
-
-        public static void CopyObject<T>(this T source, T destination, params string[] ignoredProperties)
-            where T : class
-        {
-            destination ??= Clone<T>(source);
-            source.CopyObject(typeof(T), destination, ignoredProperties);
-        }
-
-        public static T Clone<T>(this T source) where T : class
-        {
-            T newObj = (T) Activator.CreateInstance(typeof(T));
-            return source;
-        }
+        CopyProperties(source, type, destination, ignoredProperties, honourIgnoreCopy: true);
     }
 
-    [System.AttributeUsage(System.AttributeTargets.Property | AttributeTargets.Class, Inherited = true,
-        AllowMultiple = true)]
-    public sealed class IgnoreCopyAttribute : Attribute
+    /// <summary>
+    /// Copies the properties of source into destination (see <see cref="CopyObject(object, Type, object, string[])"/>).
+    /// A new destination is created when none is given.
+    /// </summary>
+    public static void CopyObject<T>(this T source, T? destination, params string[] ignoredProperties)
+        where T : class
     {
-        public bool IgnoreCopy { get; set; }
+        destination ??= Clone(source);
+        source.CopyObject(typeof(T), destination, ignoredProperties);
+    }
 
-        // This is a positional argument
-        public IgnoreCopyAttribute(bool ignore = true)
+    /// <summary>
+    /// Creates a new instance of <typeparamref name="T"/> with the public properties of source (shallow copy,
+    /// <see cref="IgnoreCopyAttribute"/> is not applied, collections are not copied).
+    /// </summary>
+    public static T Clone<T>(this T source) where T : class
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        var newObj = Activator.CreateInstance<T>();
+        CopyProperties(source, typeof(T), newObj, Array.Empty<string>(), honourIgnoreCopy: false);
+        return newObj;
+    }
+
+    private static void CopyProperties(object source, Type type, object destination, string[]? ignoredProperties,
+        bool honourIgnoreCopy)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(destination);
+        foreach (var prop in type.GetProperties())
         {
-            IgnoreCopy = ignore;
+            if (honourIgnoreCopy && prop.GetCustomAttributes<IgnoreCopyAttribute>().Any(a => a.IgnoreCopy)) continue;
+            if (ignoredProperties != null && ignoredProperties.Contains(prop.Name)) continue;
+            if (!prop.CanRead || prop.GetSetMethod() == null || prop.GetIndexParameters().Length > 0) continue;
+
+            if (prop.PropertyType.IsArray
+                || (prop.PropertyType.IsGenericType &&
+                    prop.PropertyType.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+                || (prop.PropertyType.IsGenericType &&
+                    prop.PropertyType.GetGenericTypeDefinition() == typeof(ICollection<>)))
+            {
+                continue;
+            }
+
+            if (prop.PropertyType != typeof(string) && prop.PropertyType.IsClass &&
+                prop.PropertyType.GetInterface("IEntity", true) == typeof(IEntity))
+            {
+                if (honourIgnoreCopy && prop.PropertyType.GetCustomAttributes<IgnoreCopyAttribute>().Any(a => a.IgnoreCopy)) continue;
+
+                var sourceChild = prop.GetValue(source);
+                if (sourceChild == null) continue;
+
+                var destinationChild = prop.GetValue(destination);
+                if (destinationChild != null)
+                {
+                    CopyProperties(sourceChild, prop.PropertyType, destinationChild, ignoredProperties, honourIgnoreCopy);
+                    continue;
+                }
+            }
+
+            prop.SetValue(destination, prop.GetValue(source));
         }
+    }
+}
+
+/// <summary>
+/// Excludes a property (or all properties of a type) from <see cref="EntityExtensions.CopyObject(object, Type, object, string[])"/>.
+/// </summary>
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Class, Inherited = true, AllowMultiple = true)]
+public sealed class IgnoreCopyAttribute : Attribute
+{
+    /// <summary>When true the property is not copied.</summary>
+    public bool IgnoreCopy { get; set; }
+
+    /// <summary>Creates the attribute.</summary>
+    /// <param name="ignore">Whether to ignore the property</param>
+    public IgnoreCopyAttribute(bool ignore = true)
+    {
+        IgnoreCopy = ignore;
     }
 }

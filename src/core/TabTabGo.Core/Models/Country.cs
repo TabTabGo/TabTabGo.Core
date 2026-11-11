@@ -1,25 +1,31 @@
-﻿using System.Text.Json.Serialization;
+namespace TabTabGo.Core.Models;
 
-namespace TabTabGo.Core.Models
+/// <summary>
+/// Country reference data.
+/// </summary>
+public class Country
 {
-    public class Country
-    {
-        [JsonPropertyName("name")]
-        public string Name { get; set; }
+    /// <summary>Country name in the requested language.</summary>
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
 
-        [JsonPropertyName("alpha_2")]
-        public string Alpha2 { get; set; }
+    /// <summary>ISO 3166-1 alpha-2 code.</summary>
+    [JsonPropertyName("alpha_2")]
+    public string Alpha2 { get; set; } = string.Empty;
 
-        [JsonPropertyName("alpha_3")]
-        public string Alpha3 { get; set; }
+    /// <summary>ISO 3166-1 alpha-3 code.</summary>
+    [JsonPropertyName("alpha_3")]
+    public string Alpha3 { get; set; } = string.Empty;
 
-        [JsonPropertyName("numeric")]
-        public string Number { get; set; }
+    /// <summary>ISO 3166-1 numeric code.</summary>
+    [JsonPropertyName("numeric")]
+    public string Number { get; set; } = string.Empty;
 
-        [JsonPropertyName("official_name")]
-        public string? OfficialName { get; set; }
+    /// <summary>Official name.</summary>
+    [JsonPropertyName("official_name")]
+    public string? OfficialName { get; set; }
 
-        [JsonPropertyName("phone_code")]
-        public string? PhoneCode { get; set; }
-    }
+    /// <summary>International dialling code.</summary>
+    [JsonPropertyName("phone_code")]
+    public string? PhoneCode { get; set; }
 }

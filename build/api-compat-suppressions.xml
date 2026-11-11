@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The complete list of intentional API breaks of 10.0.0 against 8.0.1-alpha-01 (the net8.0 assemblies).
+  Every entry maps to a row of the breaking-change table (spec 6.4). Adding any other break fails the Release build
+  (build/ApiCompat.targets); a new entry needs an architect-approved breaking-change row first.
+-->
+<Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <!-- B4: ErrorHandlingMiddleware takes a logger and options (use UseTabTabGoErrorHandling or UseMiddleware<>) -->
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:TabTabGo.Core.WebApi.Middlewares.ErrorHandlingMiddleware.#ctor(Microsoft.AspNetCore.Http.RequestDelegate)</Target>
+  </Suppression>
+  <!-- B21: GetChanges() returns IReadOnlyList<EntityChange> instead of dynamic -->
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:TabTabGo.Core.Data.IUnitOfWork.GetChanges</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:TabTabGo.Core.Data.IUnitOfWork.GetChanges</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:TabTabGo.Data.EF.UnitOfWork.GetChanges</Target>
+  </Suppression>
+  <!-- B37: ITenant.Settings and ISecurityService.GetClientId were removed after 8.0.1-alpha-01 was published -->
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:TabTabGo.Core.ITenant`1.get_Settings</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:TabTabGo.Core.ITenant`1.set_Settings(System.Object)</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:TabTabGo.Core.Services.ISecurityService`2.GetClientId</Target>
+  </Suppression>
+</Suppressions>
