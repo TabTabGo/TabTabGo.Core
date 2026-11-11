@@ -13,12 +13,12 @@
     <PackageReleaseNotes>Upgrade to .net 8</PackageReleaseNotes>
     <PackageIcon>logo@32.png</PackageIcon>
     <LangVersion>default</LangVersion>
-    <Version>8.0.0</Version>
+    <Version>8.0.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OData" Version="8.2.4" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OData" Version="8.3.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
   </ItemGroup>
 
   <ItemGroup>
