@@ -9,10 +9,10 @@ ASP.NET Core **entity routes**, middlewares, and a JSON layer that works with bo
 | Line | Runtime | Package version | Notes |
 |---|---|---|---|
 | **8.x** | .NET 8 (support ends 2026-11-10) | 8.0.1 | bridge release: vulnerable packages cleared, no code changes |
-| **10.x** (this branch) | .NET 10 (LTS to 2028-11-14) | **10.0.0** | every package latest stable, all known bugs fixed, STJ + Newtonsoft interop, full tests |
-| 11.x | .NET 11 (RC until GA) | 11.0.0-rc.N | retarget of 10.x, see the release notes of that line |
+| 10.x | .NET 10 (LTS to 2028-11-14) | 10.0.0 | every package latest stable, all known bugs fixed, STJ + Newtonsoft interop, full tests |
+| **11.x** (this branch) | .NET 11 (GA) | **11.0.0** | retarget of 10.x: net11.0, EF Core 11, latest packages, same API and behaviour |
 
-Everything below describes the 10.x line. The TFM is `net10.0` only; there is no multi-targeting.
+Everything below describes the 11.x line (identical to 10.x apart from the target framework and package majors). The TFM is `net11.0` only; there is no multi-targeting.
 
 ## 2. Packages
 
@@ -307,8 +307,8 @@ Binary and behaviour changes (additive changes are not listed):
 
 | Id | Change |
 |---|---|
-| B1 | `net10.0` only |
-| B2 | EF Core 8 to 10, AspNetCore.OData 8 to 9, JsonPatch 8 to 10 |
+| B1 | `net11.0` only (10.x was `net10.0` only) |
+| B2 | EF Core 8 to 11, AspNetCore.OData 8 to 9, JsonPatch 8 to 11 |
 | B3 | Swashbuckle is no longer a dependency of `TabTabGo.Core.Api` |
 | B4 | `ErrorHandlingMiddleware` takes a logger and options: use `UseTabTabGoErrorHandling()` or `UseMiddleware<>` |
 | B5 | `GetPageListAsync`: 1-based `PageNumber` out, negative index throws, default key order |
@@ -359,12 +359,12 @@ becomes `ApiException`; `ISecurityService` and `IParseClaimsPrincipal` are gener
 
 ## 8. Building and releasing
 
-* `global.json` pins SDK 10.0.401 and the Microsoft.Testing.Platform runner. `Directory.Build.props` holds the TFM,
+* `global.json` pins SDK 11.0.100 and the Microsoft.Testing.Platform runner. `Directory.Build.props` holds the TFM,
   language version, nullable, NuGet audit (vulnerabilities fail the build) and package metadata;
   `Directory.Packages.props` holds every package version (central package management).
 * `dotnet build -c Release -warnaserror` must be clean. `dotnet pack -c Release` produces the six packages; package
   validation compares against `8.0.1-alpha-01`.
-* Publishing is driven by version tags (`v10.0.0`, `v10.0.0-rc.1`).
+* Publishing is driven by version tags (`v11.0.0`, `v11.0.0-rc.1`).
 
 ## 9. License
 

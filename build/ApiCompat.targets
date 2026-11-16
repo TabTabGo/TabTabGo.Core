@@ -1,8 +1,8 @@
 <Project>
 
   <!--
-    API compatibility gate. Package validation cannot compare the net8.0 baseline with a net10.0-only package (PKV006),
-    so the baseline net8.0 assembly is compared with the freshly built net10.0 assembly using the ApiCompat tool from
+    API compatibility gate. Package validation cannot compare the net8.0 baseline with a net11.0-only package (PKV006),
+    so the baseline net8.0 assembly is compared with the freshly built net11.0 assembly using the ApiCompat tool from
     .config/dotnet-tools.json. Any break that is not listed in build/api-compat-suppressions.xml fails the Release build.
     Reference assemblies come from the .NET reference packs, downloaded by NuGet. Opt out with -p:ApiCompatGate=false.
   -->
