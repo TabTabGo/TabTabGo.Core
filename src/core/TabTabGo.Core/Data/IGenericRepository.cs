@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using System.Text.Json.Nodes;
 
 namespace TabTabGo.Core.Data;
@@ -14,7 +14,7 @@ public interface IGenericRepository<TEntity, in TKey> : IGenericReadRepository<T
 
     /// <summary>
     /// Inserts the specified entity async.
-    /// </summary>Value
+    /// </summary>
     /// <param name="entity">The entity.</param>
     /// <param name="cancellationToken"></param>
     Task<TEntity?> InsertAsync(TEntity entity, CancellationToken cancellationToken = default);
@@ -61,7 +61,7 @@ public interface IGenericRepository<TEntity, in TKey> : IGenericReadRepository<T
     /// Deletes list of entities.
     /// </summary>
     /// <param name="entitiesToDelete">The entity to delete.</param>
-    void Delete(IQueryable<TEntity?> entitiesToDelete);
+    void Delete(IQueryable<TEntity> entitiesToDelete);
     #endregion
 
     #region Update

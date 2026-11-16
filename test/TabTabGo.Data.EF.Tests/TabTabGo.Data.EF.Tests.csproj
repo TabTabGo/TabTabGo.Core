@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\data\TabTabGo.Data.EF\TabTabGo.Data.EF.csproj" />
+    <ProjectReference Include="..\TabTabGo.Core.TestKit\TabTabGo.Core.TestKit.csproj" />
+  </ItemGroup>
+
+</Project>

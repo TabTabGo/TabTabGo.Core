@@ -1,11 +1,18 @@
 namespace TabTabGo.IO.Utilities;
 
+/// <summary>
+/// Path helpers.
+/// </summary>
 public class PathUtility
 {
-    public static string GetTempPath(string customTempFolder = null)
+    /// <summary>
+    /// Gets the temp folder: the custom folder (created when missing) or the system temp path.
+    /// </summary>
+    /// <param name="customTempFolder">Optional custom folder</param>
+    public static string GetTempPath(string? customTempFolder = null)
     {
         // ensure that custom temp folder exists
-        if (!String.IsNullOrEmpty(customTempFolder) && !Directory.Exists(customTempFolder))
+        if (!string.IsNullOrEmpty(customTempFolder) && !Directory.Exists(customTempFolder))
         {
             Directory.CreateDirectory(customTempFolder);
         }
@@ -13,28 +20,22 @@ public class PathUtility
         return customTempFolder ?? Path.GetTempPath();
     }
 
+    /// <summary>
+    /// Resolves a path against the application folder; an absolute path is returned unchanged.
+    /// </summary>
+    /// <param name="path">Relative or absolute path</param>
     public static string ResolvePath(string path)
     {
-
-        var resolvedPath = System.IO.Path.Combine(AppContext.BaseDirectory, path);
-
-        if (resolvedPath == null)
-        {
-            resolvedPath = Path.GetFullPath(path);
-        }
-
-        //if (HttpContext.Current != null)
-        //{
-        //    return HostingEnvironment.MapPath(path);
-        //}
-        //else
-        //{
-        //    return Path.GetFullPath(path);
-        //}
-
-        return resolvedPath;
+        ArgumentNullException.ThrowIfNull(path);
+        return Path.Combine(AppContext.BaseDirectory, path);
     }
 
+    /// <summary>
+    /// Makes sure a directory exists.
+    /// </summary>
+    /// <param name="path">Directory</param>
+    /// <param name="message">Reason when it could not be created or reached</param>
+    /// <returns>True when the directory exists</returns>
     public static bool EnsureDirectory(string path, out string message)
     {
         message = string.Empty;
@@ -44,11 +45,12 @@ public class PathUtility
             {
                 Directory.CreateDirectory(path);
             }
+
             return true;
         }
-        catch (Exception x)
+        catch (Exception x) when (x is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            message = $@"Cannot create or access directory {path} {x.Message}";
+            message = $"Cannot create or access directory {path} {x.Message}";
             return false;
         }
     }

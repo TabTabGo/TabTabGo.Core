@@ -1,42 +1,48 @@
-﻿using System.Net;
+using System.Net;
 using Microsoft.Extensions.Logging;
 
 namespace TabTabGo.Core.Exceptions;
 
-
 /// <summary>
 /// Exception to be thrown by the API
 /// </summary>
-// deprecated
 [Obsolete("Use ApiException instead")]
 public class TTGException : Exception
 {
+    /// <summary>System error number.</summary>
     public int ErrorNumber { get; private set; }
 
+    /// <summary>Http status code to be returned.</summary>
     public HttpStatusCode HttpStatusCode { get; private set; }
 
-    public Exception RootException { get; private set; }
-    public string ErrorCode { get; set; }
+    /// <summary>Innermost exception.</summary>
+    public Exception? RootException { get; private set; }
+
+    /// <summary>System error code.</summary>
+    public string? ErrorCode { get; set; }
+
+    /// <summary>Error level.</summary>
     public LogLevel Level { get; private set; }
-   
+
+    /// <summary>Creates an empty exception.</summary>
     public TTGException()
     {
     }
 
+    /// <summary>Creates an exception with a message.</summary>
     public TTGException(string message)
         : base(message)
     {
-
     }
 
+    /// <summary>Creates an exception with a message and cause.</summary>
     public TTGException(string message, Exception inner)
         : base(message, inner)
     {
-
     }
 
-
-    public TTGException(string message, Exception? inner = null, LogLevel level = LogLevel.Error, int? errorNumber = null, HttpStatusCode statusCode = HttpStatusCode.InternalServerError, string code = null)
+    /// <summary>Creates an exception with every field.</summary>
+    public TTGException(string message, Exception? inner = null, LogLevel level = LogLevel.Error, int? errorNumber = null, HttpStatusCode statusCode = HttpStatusCode.InternalServerError, string? code = null)
         : base(message, inner)
     {
         if (inner != null)
@@ -58,4 +64,3 @@ public class TTGException : Exception
         this.HttpStatusCode = statusCode;
     }
 }
-

@@ -1,36 +1,29 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <PackageVersion>$(VersionSuffix)</PackageVersion>
     <Title>TabTabGo Core Api</Title>
-    <Description>Reusabe functions and class for any Asp.Net API </Description>
-    <Copyright>TabTabGo</Copyright>
-    <RepositoryUrl>https://github.com/TabTabGo/TabTabGo.Core</RepositoryUrl>
-    <PackageTags>ASP.Net Api core</PackageTags>
-    <PackageReleaseNotes>Upgrade to .net 8</PackageReleaseNotes>
-    <PackageIcon>logo@32.png</PackageIcon>
-    <LangVersion>default</LangVersion>
-    <Version>8.0.0</Version>
+    <Description>Reusable ASP.NET Core helpers: entity route generation (minimal API), legacy controller base, error handling and request logging middlewares.</Description>
+    <PackageTags>aspnetcore;api;minimal-api;middleware</PackageTags>
+    <!-- TODO: remove on the next SDK bump. The ASP.NET route-handler analyzer of SDK 10.0.401 throws a NullReferenceException
+         (AD0001) on generic handlers with Results<...> return types; it is an analyzer defect, not a code issue.
+         Scoped to exactly the pinned SDK so a newer SDK reports it again. -->
+    <NoWarn Condition="'$(NETCoreSdkVersion)' == '10.0.401'">$(NoWarn);AD0001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OData" Version="8.2.4" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\..\assets\logo@32.png">
-      <Pack>True</Pack>
-      <PackagePath></PackagePath>
-      <Link>logo@32.png</Link>
-    </None>
+    <PackageReference Include="Microsoft.AspNetCore.OData" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\TabTabGo.Core\TabTabGo.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TabTabGo.Core.Api.Tests" />
   </ItemGroup>
 
 </Project>

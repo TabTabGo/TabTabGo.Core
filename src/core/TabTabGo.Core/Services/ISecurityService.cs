@@ -1,5 +1,10 @@
 namespace TabTabGo.Core.Services;
 
+/// <summary>
+/// Security information of the current user and tenant.
+/// </summary>
+/// <typeparam name="TUserKey">User key type</typeparam>
+/// <typeparam name="TTenantKey">Tenant key type</typeparam>
 public interface ISecurityService<TUserKey, TTenantKey> where TUserKey : struct where TTenantKey : struct
 {
     /// <summary>
@@ -13,6 +18,10 @@ public interface ISecurityService<TUserKey, TTenantKey> where TUserKey : struct 
     /// </summary>
     /// <returns></returns>
     ITenant<TTenantKey>? GetTenant();
+    /// <summary>
+    /// Whether the user is authorized for the roles
+    /// </summary>
+    /// <param name="roles">Roles</param>
     bool IsAuthorized(string roles);
     /// <summary>
     /// Reset Role Permission Cached Data
@@ -87,6 +96,9 @@ public interface ISecurityService<TUserKey, TTenantKey> where TUserKey : struct 
     /// </summary>
     /// <returns></returns>
     List<string> GetRoles();
+    /// <summary>
+    /// Permissions per role and entity
+    /// </summary>
     IDictionary<string, Dictionary<string, List<int>>> GetRolePermissions();
     
     /// <summary>

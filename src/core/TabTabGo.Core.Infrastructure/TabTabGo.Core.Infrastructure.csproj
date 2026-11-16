@@ -1,29 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Intentionally empty and not packed since 10.0.0 (spec Q6). Repository ports live in TabTabGo.Core (TabTabGo.Core.Data). -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <PackageVersion>$(VersionSuffix)</PackageVersion>
-    <Title>TabTabGo Core Infrastructure</Title>
-    <Description>Main infrastructres Interfaces to be used by any system</Description>
-    <Copyright>TabTabGo</Copyright>
-    <PackageIcon>logo@32.png</PackageIcon>
-    <RepositoryUrl>https://github.com/TabTabGo/TabTabGo.Core</RepositoryUrl>
-    <LangVersion>latest</LangVersion>
-    <Version>8.0.0</Version>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\TabTabGo.Core\TabTabGo.Core.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="..\..\..\assets\logo@32.png">
-      <Pack>True</Pack>
-      <PackagePath></PackagePath>
-      <Link>logo@32.png</Link>
-    </None>
   </ItemGroup>
 
 </Project>

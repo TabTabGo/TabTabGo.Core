@@ -1,38 +1,26 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <Title>TabTabGo Core Services</Title>
-    <Description>Reusable core services implementation</Description>
-    <Copyright>TabTabGo</Copyright>
-    <PackageIcon>logo@32.png</PackageIcon>
-    <RepositoryUrl>https://github.com/TabTabGo/TabTabGo.Core</RepositoryUrl>
-    <PackageTags>Services Core</PackageTags>
-    <PackageVersion>$(VersionSuffix)</PackageVersion>
-    <LangVersion>latest</LangVersion>
-    <Version>8.0.0</Version>
+    <Description>Reusable base read/write services (OData aware), and the JSON string localizer.</Description>
+    <PackageTags>services;odata;localization</PackageTags>
   </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="LinqKit.Core" />
+    <PackageReference Include="Microsoft.AspNetCore.OData" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\TabTabGo.Core\TabTabGo.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="LinqKit.Core" Version="1.2.5" />
-    <PackageReference Include="Microsoft.AspNetCore.OData" Version="8.2.4" />
-    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Localization.Abstractions" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="..\..\..\assets\logo@32.png">
-      <Pack>True</Pack>
-      <PackagePath></PackagePath>
-      <Link>logo@32.png</Link>
-    </None>
+    <InternalsVisibleTo Include="TabTabGo.Core.Services.Tests" />
   </ItemGroup>
 
 </Project>

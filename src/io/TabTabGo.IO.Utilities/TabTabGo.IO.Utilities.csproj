@@ -1,9 +1,15 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-    </PropertyGroup>
+  <PropertyGroup>
+    <Title>TabTabGo IO Utilities</Title>
+    <Description>File and path helpers (temp files, unique file names, safe delete).</Description>
+    <PackageTags>io;files;utilities</PackageTags>
+    <!-- 8.0.1-alpha-01 never contained this package (NuGet has 6.0.6.3 from older code), so there is no baseline to validate against. -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TabTabGo.IO.Utilities.Tests" />
+  </ItemGroup>
 
 </Project>

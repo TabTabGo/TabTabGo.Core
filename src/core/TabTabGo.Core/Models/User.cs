@@ -1,8 +1,14 @@
-﻿namespace TabTabGo.Core
+namespace TabTabGo.Core;
+
+/// <summary>
+/// A user of the system.
+/// </summary>
+/// <typeparam name="TKey">User key type</typeparam>
+public interface IUser<TKey> where TKey : struct
 {
-    public interface IUser<TKey> where TKey : struct
-    {
-        public string Username { get; set; }
-        public TKey UserId { get; set; }
-    }
+    /// <summary>User name.</summary>
+    public string Username { get; set; }
+
+    /// <summary>User id.</summary>
+    public TKey UserId { get; set; }
 }

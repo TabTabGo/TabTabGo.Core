@@ -1,68 +1,65 @@
-﻿
 namespace TabTabGo.Core.Comparer;
 
+/// <summary>
+/// Compares two JSON arrays ignoring item order. Items are compared with <see cref="JsonNodeComparer"/>;
+/// nested arrays are compared recursively.
+/// </summary>
 public class JsonArrayComparer : IEqualityComparer<JsonArray>, IDisposable
 {
+    /// <summary>Property names ignored while comparing objects.</summary>
     public string[] IgnoredProperties { get; set; }
 
+    /// <summary>Creates a comparer.</summary>
+    /// <param name="ignoredProps">Property names to ignore</param>
     public JsonArrayComparer(params string[] ignoredProps)
     {
         IgnoredProperties = ignoredProps;
     }
+
+    /// <inheritdoc />
     public bool Equals(JsonArray? x, JsonArray? y)
     {
-        if (x == null && y == null) return true;
-        if (x != null && y == null) return false;
-        if (x == null && y != null) return false;
-        if (x.Count() != y.Count()) return false;
-        var jCompare = new JsonNodeComparer(IgnoredProperties);
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.Count != y.Count) return false;
+        using var jCompare = new JsonNodeComparer(IgnoredProperties);
 
-        var comparedItems = new List<int>();
+        var comparedItems = new HashSet<int>();
         foreach (var xItem in x)
         {
-            var compareResult = false;
-            for (int i = 0; i < y.Count; i++)
+            var found = false;
+            for (var i = 0; i < y.Count; i++)
             {
                 if (comparedItems.Contains(i)) continue;
 
                 var yItem = y[i];
-                if (xItem is JsonArray && yItem is JsonArray)
+                var same = xItem is JsonArray xArray && yItem is JsonArray yArray
+                    ? Equals(xArray, yArray)
+                    : jCompare.Equals(xItem, yItem);
+                if (same)
                 {
-                    if (Equals(xItem, yItem))
-                    {
-                        comparedItems.Add(i);
-                        compareResult = true;
-                        break;
-                    }
-                    else continue;
-                }
-                if (xItem is JsonNode && yItem is JsonNode)
-                {
-                    if (jCompare.Equals(xItem, yItem))
-                    {
-                        comparedItems.Add(i);
-                        compareResult = true;
-                        break;
-                    }
-                    else
-                    {
-                        continue;
-                    }
+                    comparedItems.Add(i);
+                    found = true;
+                    break;
                 }
             }
-            if (!compareResult) return false;
+
+            if (!found) return false;
         }
+
         return true;
     }
 
+    /// <inheritdoc />
     public int GetHashCode(JsonArray obj)
     {
-        return obj.GetHashCode();
+        using var jCompare = new JsonNodeComparer(IgnoredProperties);
+        return obj.Aggregate(0, (hash, item) => unchecked(hash + (item is JsonArray array ? GetHashCode(array) : jCompare.GetHashCode(item))));
     }
 
+    /// <inheritdoc />
     public void Dispose()
     {
-
+        GC.SuppressFinalize(this);
     }
 }
-
