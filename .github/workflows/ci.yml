@@ -1,0 +1,71 @@
+name: CI
+
+# Build, test, audit, pack and inspect. Never publishes, never reads a secret, never runs with a write token.
+# Uses pull_request (not pull_request_target) so fork PRs get no secrets.
+on:
+  pull_request:
+    branches: [master, 'features/**', 'releases/**']
+  push:
+    branches: ['features/**', 'releases/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+jobs:
+  build-test:
+    name: build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup .NET (SDK from global.json)
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      - name: Script self-tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
+      - name: Restore (the ApiCompat reference packs and baseline packages are restored for any configuration)
+        run: dotnet restore TabTabGo.Core.sln
+
+      - name: Build (warnings are errors; the ApiCompat gate runs in this build)
+        run: dotnet build TabTabGo.Core.sln -c Release -warnaserror --no-restore
+
+      - name: Test
+        run: dotnet test --solution TabTabGo.Core.sln -c Release --no-build
+
+      - name: Vulnerable packages (direct and transitive)
+        run: |
+          set -euo pipefail
+          dotnet list TabTabGo.Core.sln package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
+          python3 scripts/release_verify.py audit --kind vulnerable --file vulnerable.txt
+
+      - name: Deprecated packages
+        run: |
+          set -euo pipefail
+          dotnet list TabTabGo.Core.sln package --deprecated 2>&1 | tee deprecated.txt
+          python3 scripts/release_verify.py audit --kind deprecated --file deprecated.txt --ignore-project '\.(Tests?|TestKit)$'
+
+      - name: Pack (nothing is pushed; package validation runs)
+        run: dotnet pack TabTabGo.Core.sln -c Release --no-build -p:ContinuousIntegrationBuild=true -o out
+
+      - name: Inspect the packages (exact id set, snupkg, dependencies)
+        run: |
+          set -euo pipefail
+          version="$(python3 scripts/release_verify.py version)"
+          python3 scripts/check_pack_output.py out --version "$version" --ids-file scripts/expected-packages.txt --tfm net10.0 --require-readme --require-license

@@ -8,9 +8,9 @@ ASP.NET Core **entity routes**, middlewares, and a JSON layer that works with bo
 
 | Line | Runtime | Package version | Notes |
 |---|---|---|---|
-| **8.x** | .NET 8 (support ends 2026-11-10) | 8.0.1 | bridge release: vulnerable packages cleared, no code changes |
+| **8.x** | .NET 8 (support ends 2026-11-10) | 8.0.1 | bridge release: vulnerable packages cleared; security fix: exceptions are no longer serialised to API clients (R4-2) |
 | **10.x** (this branch) | .NET 10 (LTS to 2028-11-14) | **10.0.0** | every package latest stable, all known bugs fixed, STJ + Newtonsoft interop, full tests |
-| 11.x | .NET 11 (RC until GA) | 11.0.0-rc.N | retarget of 10.x, see the release notes of that line |
+| 11.x | .NET 11 | 11.0.0 | retarget of 10.x, see the release notes of that line |
 
 Everything below describes the 10.x line. The TFM is `net10.0` only; there is no multi-targeting.
 
@@ -124,7 +124,10 @@ Pass `QueryFlags.EnableTracking` when you want tracked entities.
 `UpdateChanges`, JSON patch, partial JSON update and soft delete, with hooks (`IsValidTo*`, `Pre*`, `Post*`).
 Failures are `ApiException`s: **404** when the entity does not exist, **400** when a validation hook rejects the operation
 (`Create` 2001, `Update` 4001/4002/4003, `Delete` 3001/3002). `CanDelete(ids)` returns the real answer and
-`GetDeleteValidationAsync(ids)` tells which entity blocks the delete. `Update(id, entity)` rejects a body whose key differs
+`GetDeleteValidationAsync(ids)` tells which entity blocks the delete. `GetDeleteValidationAsync(ids)` is **unscoped by design**
+(for admin or unscoped callers): it validates by key across every scope. Scoped callers use `CanDelete(ids, scope)`, and a
+rule belongs in `IsValidToDelete`, which both paths honour; a service that overrides `GetDeleteValidationAsync` or the unscoped
+delete methods makes the scoped delete answer 500 `DELETE_OVERRIDDEN` instead of silently skipping the override. `Update(id, entity)` rejects a body whose key differs
 from the route key (400, 4003).
 
 ### 4.4 OData
@@ -184,7 +187,9 @@ compares the text of the elements: `column.exist('//*[text() = sql:variable("@p0
     run again on the retry, so keep them repeatable. A retry can only rebuild a change made of scalar properties of the
     patched entity. If the tracker also holds owned types, added, deleted or modified child rows, collection changes, other
     entities, or a shadow-property change, the retry fails closed: 503 `RETRY_NOT_REPLAYABLE`, nothing is persisted and the
-    client must send the request again (the response never claims a change that was not applied).
+    client must reload the entity before sending the request again (the response never claims a change that was not applied).
+    A commit that fails with a transient error under a retrying execution strategy can be ambiguous (the commit may have
+    succeeded; a known EF Core limitation), which is why the message says the outcome could not be confirmed.
   * **Filters are bounded.** `$filter` longer than 4 096 characters or nested deeper than 32 levels answers 400.
 * **Bulk delete** (`EntityControllerBase.DeleteEntities`) accepts at most 500 ids (400 `TOO_MANY_IDS`), looks them up with one
   `IN` list, and checks the scope with one count query.
@@ -363,8 +368,8 @@ becomes `ApiException`; `ISecurityService` and `IParseClaimsPrincipal` are gener
   language version, nullable, NuGet audit (vulnerabilities fail the build) and package metadata;
   `Directory.Packages.props` holds every package version (central package management).
 * `dotnet build -c Release -warnaserror` must be clean. `dotnet pack -c Release` produces the six packages; package
-  validation compares against `8.0.1-alpha-01`.
-* Publishing is driven by version tags (`v10.0.0`, `v10.0.0-rc.1`).
+  validation compares against the pinned `8.0.1-alpha-01` package until the published `8.0.1` exists; the baseline then moves to `8.0.1`.
+* Publishing is driven by stable version tags only (`v10.0.0`); pre-release tags are refused.
 
 ## 9. License
 

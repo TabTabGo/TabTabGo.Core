@@ -19,10 +19,21 @@ internal static class ODataFilterTokenizer
     /// <summary>Deepest nesting of groups and <c>not</c>s that is accepted; the parser is recursive, so this bounds its stack.</summary>
     internal const int MaxDepth = 32;
 
+    // per thread: tests run in parallel, and a process-wide counter let another test's parse show up in the count of a test that
+    // proves a filter never reached the tokenizer (the callers of Split are synchronous, so a test reads the thread it ran on)
+    [ThreadStatic]
     private static int _calls;
 
-    /// <summary>How many times <see cref="Split"/> ran in this process (lets tests prove that standard filters bypass it).</summary>
-    internal static int Calls => Volatile.Read(ref _calls);
+    /// <summary>How many times <see cref="Split"/> ran on the current thread (lets tests prove that standard filters bypass it).</summary>
+    internal static int Calls => _calls;
+
+    // Test-only: whitespace look-ahead steps on this thread. A blank used to look ahead over the rest of its run (quadratic); the tests
+    // assert the steps stay proportional to the input, which needs no clock.
+    [ThreadStatic]
+    private static long _lookAheadSteps;
+
+    /// <summary>How many characters the whitespace look-aheads of <see cref="Split"/> visited on the current thread.</summary>
+    internal static long LookAheadSteps => _lookAheadSteps;
 
     /// <summary>Result of <see cref="Split"/>.</summary>
     /// <param name="Filter">The filter without the custom functions; empty when nothing is left</param>
@@ -37,7 +48,7 @@ internal static class ODataFilterTokenizer
     /// <exception cref="ApiException">A custom function is used under <c>or</c> or <c>not</c> (400)</exception>
     internal static Result Split(string filter, IReadOnlyCollection<string> customFunctions)
     {
-        Interlocked.Increment(ref _calls);
+        _calls++;
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(customFunctions);
         if (filter.Length > MaxFilterLength)
@@ -113,6 +124,7 @@ internal static class ODataFilterTokenizer
                 while (next < filter.Length && char.IsWhiteSpace(filter[next]))
                 {
                     next++;
+                    _lookAheadSteps++;
                 }
 
                 if (next < filter.Length && filter[next] == '(')
@@ -457,6 +469,7 @@ internal static class ODataFilterTokenizer
             while (i < text.Length && char.IsWhiteSpace(text[i]))
             {
                 i++;
+                _lookAheadSteps++;
             }
 
             return string.Compare(text, i, word, 0, word.Length, StringComparison.OrdinalIgnoreCase) == 0
@@ -487,6 +500,7 @@ internal static class ODataFilterTokenizer
             while (_position < text.Length && char.IsWhiteSpace(text[_position]))
             {
                 _position++;
+                _lookAheadSteps++;
             }
         }
 
