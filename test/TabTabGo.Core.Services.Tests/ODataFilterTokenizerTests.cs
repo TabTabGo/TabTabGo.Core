@@ -266,8 +266,15 @@ public class ODataFilterTokenizerTests
 
     private static string BlankRun(int blanks) => "xmlExist(a,'v') and A" + new string(' ', blanks) + "B";
 
+    // Quadratic work grows 16x for 4x the input, linear work 4x: the verdict line sits between them (geometric mean 8, with room).
+    private const double QuadraticThreshold = 9.0;
+
+    private static readonly string SmallInput = BlankRun((ODataFilterTokenizer.MaxFilterLength - 40) / 4);
+
+    private static readonly string LargeInput = BlankRun(ODataFilterTokenizer.MaxFilterLength - 40);
+
     // Best-of-N wall time of `repeats` runs: the minimum is the run least disturbed by other processes on a busy machine.
-    private static double BestTicks(Action run, int repeats, int rounds = 7)
+    private static double BestTicks(Action run, int repeats, int rounds = 9)
     {
         run(); // warm up the JIT
         var best = long.MaxValue;
@@ -285,51 +292,45 @@ public class ODataFilterTokenizerTests
         return best;
     }
 
-    /// <summary>How much longer the parser takes for 4 times the input: about 4 when linear, about 16 when quadratic.</summary>
-    private static double ScalingFactorForFourTimesTheInput(Action<string> parse)
-    {
-        var small = BlankRun((ODataFilterTokenizer.MaxFilterLength - 40) / 4);
-        var large = BlankRun(ODataFilterTokenizer.MaxFilterLength - 40);
-        // the same total work on both sides keeps the small side measurable
-        var smallTicks = BestTicks(() => { for (var i = 0; i < 4; i++) parse(small); }, 5);
-        var largeTicks = BestTicks(() => parse(large), 5);
-        return largeTicks / smallTicks;
-    }
-
     [Fact]
     public void Split_LongRunOfBlanks_IsLinear()
     {
         // each blank used to look ahead over the rest of the run (quadratic). Compared by scaling, not by an absolute time, so a
-        // busy build machine does not fail it: linear is about 1 here (4 small parses against 1 large one), quadratic about 4.
-        var factor = ScalingFactorForFourTimesTheInput(f => Split(f));
+        // busy build machine does not fail it: 4x the input takes about 4x as long when linear and about 16x when quadratic.
+        var small = BestTicks(() => Split(SmallInput), repeats: 40);
+        var large = BestTicks(() => Split(LargeInput), repeats: 40);
 
-        Assert.True(factor < 2.5, $"4x the input took {factor:F1}x as long per unit of work");
+        var factor = large / small;
+
+        Assert.True(factor < QuadraticThreshold, $"4x the input took {factor:F1}x as long (linear is about 4, quadratic about 16)");
     }
 
     [Fact]
-    public void ScalingCheck_FlagsAQuadraticParser()
+    public void ScalingVerdict_SeparatesLinearFromQuadratic_ByCountingOperations()
     {
-        // proves the check above would catch the old behaviour: a parser that looks ahead over the rest of the run for every blank
-        static void Quadratic(string text)
+        // deterministic (no clock): the verdict line of the check above, applied to the operation counts of a reference parser that
+        // looks ahead over the rest of the run for every blank (quadratic) and one that does not (linear)
+        static long Quadratic(string text)
         {
-            var count = 0;
+            long operations = 0;
             for (var i = 0; i < text.Length; i++)
             {
                 for (var j = i; j < text.Length; j++)
                 {
-                    if (text[j] == ' ')
-                    {
-                        count++;
-                    }
+                    operations++;
                 }
             }
 
-            GC.KeepAlive(count);
+            return operations;
         }
 
-        var factor = ScalingFactorForFourTimesTheInput(Quadratic);
+        static long Linear(string text) => text.Length;
 
-        Assert.True(factor >= 2.5, $"a quadratic parser scaled only {factor:F1}x");
+        var quadratic = (double)Quadratic(LargeInput) / Quadratic(SmallInput);
+        var linear = (double)Linear(LargeInput) / Linear(SmallInput);
+
+        Assert.True(quadratic >= QuadraticThreshold, $"quadratic scaled {quadratic:F1}x");
+        Assert.True(linear < QuadraticThreshold, $"linear scaled {linear:F1}x");
     }
 
     [Fact]
