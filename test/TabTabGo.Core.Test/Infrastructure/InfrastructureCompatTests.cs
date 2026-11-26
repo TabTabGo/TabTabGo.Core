@@ -27,7 +27,7 @@ public class InfrastructureCompatTests
     }
 
     [Fact]
-    public async Task Consumer_UsingInfrastructureData_CompilesAndRunsAgainstImplementation()
+    public async Task Consumer_UsingInfrastructureData_CompilesAndRunsAgainstAFake()
     {
         var uow = Fake.Create<IUnitOfWork>(m => m.Name switch
         {

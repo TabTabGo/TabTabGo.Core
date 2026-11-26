@@ -129,7 +129,7 @@ public static class SetupEntityRouters
             }
             catch (ApiException ex)
             {
-                return Results.Json(new { ex.Message, Code = ex.ErrorCode },
+                return Results.Json(new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode },
                     SerializerEngine.JsonSerializationSettings, statusCode: (int)ex.HttpStatusCode);
             }
         });
@@ -163,7 +163,7 @@ public static class SetupEntityRouters
             }
             catch (ApiException ex)
             {
-                return Results.Json(new { ex.Message, Code = ex.ErrorCode },
+                return Results.Json(new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode },
                     SerializerEngine.JsonSerializationSettings, statusCode: (int)ex.HttpStatusCode);
             }
         });
@@ -208,7 +208,7 @@ public static class SetupEntityRouters
                 }
                 catch (ApiException ex)
                 {
-                    return Results.Json(new { ex.Message, Code = ex.ErrorCode },
+                    return Results.Json(new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode },
                         SerializerEngine.JsonSerializationSettings, statusCode: (int)ex.HttpStatusCode);
                 }
                 catch (Exception e)
@@ -281,7 +281,7 @@ public static class SetupEntityRouters
             catch (ApiException ex)
             {
                 logger.LogError(ex, "Failed to update {EntityName}, changes {@Changes}", entityName, changes);
-                return Results.Json(new {  ex.Message, Code = ex.ErrorCode, },
+                return Results.Json(new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, },
                     statusCode: (int)ex.HttpStatusCode);
             }
             catch (Exception e)
@@ -333,7 +333,7 @@ public static class SetupEntityRouters
                 catch (ApiException ex)
                 {
                     logger.LogError(ex, "Failed to delete {EntityName} with Id {Id}", entityName, id);
-                    return Results.Json(new {  ex.Message, Code = ex.ErrorCode, },
+                    return Results.Json(new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, },
                         statusCode: (int)ex.HttpStatusCode);
                 }
                 catch (Exception e)

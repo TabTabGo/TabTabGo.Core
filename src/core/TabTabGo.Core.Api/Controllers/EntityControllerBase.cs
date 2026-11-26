@@ -96,7 +96,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         }
         catch (ApiException ex)
         {
-            return StatusCode((int)ex.HttpStatusCode, new { Message = ex.Message, Code = ex.ErrorCode, });
+            return StatusCode((int)ex.HttpStatusCode, new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, });
         }
     }
 
@@ -201,7 +201,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         catch (ApiException ex)
         {
             _logger.LogError(ex, "Failed to create {EntityName} : {@EntityRequest}", EntityName, @requestedEntity);
-            return StatusCode((int)ex.HttpStatusCode, new { Message = ex.Message, Code = ex.ErrorCode, });
+            return StatusCode((int)ex.HttpStatusCode, new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, });
         }
         catch (Exception e)
         {
@@ -277,7 +277,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         catch (ApiException ex)
         {
             _logger.LogError(ex, "Failed to update {EntityName}", EntityName);
-            return (StatusCode((int)ex.HttpStatusCode, new { Message = ex.Message, Code = ex.ErrorCode, }), null);
+            return (StatusCode((int)ex.HttpStatusCode, new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, }), null);
         }
         catch (Exception e)
         {
@@ -363,7 +363,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         catch (ApiException ex)
         {
             _logger.LogError(ex, "Failed to update {EntityName} with id : {Id}", EntityName, id);
-            return StatusCode((int)ex.HttpStatusCode, new { Message = ex.Message, Code = ex.ErrorCode, });
+            return StatusCode((int)ex.HttpStatusCode, new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, });
         }
         catch (Exception e)
         {
@@ -404,7 +404,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
             catch (ApiException ex)
             {
                 _logger.LogError(ex, "Failed to delete {EntityName}", EntityName);
-                return StatusCode((int)ex.HttpStatusCode, new { Message = ex.Message, Code = ex.ErrorCode, });
+                return StatusCode((int)ex.HttpStatusCode, new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, });
             }
             catch (Exception e)
             {
@@ -440,7 +440,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         catch (ApiException ex)
         {
             _logger.LogError(ex, "Failed to delete list of {EntityName}", EntityName);
-            return StatusCode((int)ex.HttpStatusCode, new { Message = ex.Message, Code = ex.ErrorCode, });
+            return StatusCode((int)ex.HttpStatusCode, new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, });
         }
         catch (Exception e)
         {

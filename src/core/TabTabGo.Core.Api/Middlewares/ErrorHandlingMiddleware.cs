@@ -52,22 +52,42 @@ namespace TabTabGo.Core.WebApi.Middlewares
 
         private Task HandleExceptionAsync(HttpContext context, Exception exception)
         {
-            logger.LogError(exception, "Unhandled exception while processing {Method} {Path}",
-                context.Request.Method, context.Request.Path);
-
-            // Only ApiException messages are written for clients; anything else gets the generic body.
-            // Never send exception.Message, stack, type name or the exception object itself.
+            // Only ApiException (and the obsolete TTGException) messages are written for clients; anything else gets the generic
+            // body. Never send exception.Message, stack, type name or the exception object itself.
             var httpCode = HttpStatusCode.InternalServerError;
+            var level = LogLevel.Error;
             ClientError body;
             if (exception is ApiException apiException)
             {
                 httpCode = apiException.HttpStatusCode;
-                body = new ClientError(apiException.ErrorNumber, apiException.ErrorCode, apiException.Message);
+                level = apiException.Level;
+                body = new ClientError(apiException.ErrorNumber, apiException.ErrorCode, ClientError.MessageOf(apiException));
             }
+#pragma warning disable CS0618 // TTGException is obsolete but still thrown by older consumer code
+            else if (exception is TTGException ttgException)
+            {
+                httpCode = ttgException.HttpStatusCode == 0 ? HttpStatusCode.InternalServerError : ttgException.HttpStatusCode;
+                level = ttgException.Level;
+                body = new ClientError(ttgException.ErrorNumber, ttgException.ErrorCode, ClientError.MessageOf(ttgException));
+            }
+#pragma warning restore CS0618
             else
             {
                 body = ClientError.Unexpected();
             }
+
+            // a server error is always an Error; a client error is not one: at most a Warning, never louder than the exception asks for
+            if ((int)httpCode >= 500)
+            {
+                level = LogLevel.Error;
+            }
+            else if (level > LogLevel.Warning)
+            {
+                level = LogLevel.Warning;
+            }
+
+            logger.Log(level, exception, "Request {Method} {Path} failed with {StatusCode}",
+                context.Request.Method, context.Request.Path, (int)httpCode);
 
             var result = JsonConvert.SerializeObject(new
             {

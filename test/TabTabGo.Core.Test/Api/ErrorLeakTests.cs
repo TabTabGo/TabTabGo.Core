@@ -137,6 +137,143 @@ public class ErrorLeakTests
         Assert.Contains("Cannot delete: in use", JsonSerializer.Serialize(objectResult.Value));
     }
 
+    [Fact]
+    public async Task EntityController_CreateFailure_ReturnsGenericBodyWithoutLeak()
+    {
+        var controller = new TestController(ServiceStub.Create(new InvalidOperationException(LeakMarker)));
+
+        var result = await controller.Create(new CreateRequest());
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(500, objectResult.StatusCode);
+        AssertNoLeak(JsonSerializer.Serialize(objectResult.Value));
+    }
+
+    [Fact]
+    public async Task EntityController_PatchFailure_ReturnsGenericBodyWithoutLeak()
+    {
+        // no validator: v8 InternalPatchEntity answers 400 when a validator says the patch IS valid (inverted check, not part of this fix)
+        var controller = new TestController(ServiceStub.Create(new InvalidOperationException(LeakMarker)), withValidator: false);
+
+        var result = await controller.Patch(1);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(500, objectResult.StatusCode);
+        AssertNoLeak(JsonSerializer.Serialize(objectResult.Value));
+    }
+
+    [Fact]
+    public async Task EntityController_PatchByJsonFailure_ReturnsGenericBodyWithoutLeak()
+    {
+        var controller = new TestController(ServiceStub.Create(new InvalidOperationException(LeakMarker)));
+
+        var result = await controller.PatchJson(1);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(500, objectResult.StatusCode);
+        AssertNoLeak(JsonSerializer.Serialize(objectResult.Value));
+    }
+
+    [Fact]
+    public async Task EntityController_DeleteListFailure_ReturnsGenericBodyWithoutLeak()
+    {
+        var controller = new TestController(ServiceStub.Create(new InvalidOperationException(LeakMarker)));
+
+        var result = await controller.DeleteMany(new[] { 1, 2 });
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(500, objectResult.StatusCode);
+        AssertNoLeak(JsonSerializer.Serialize(objectResult.Value));
+    }
+
+    [Fact]
+    public async Task EntityController_ApiExceptionWithDefaultMessage_SendsTheGenericMessageNotTheTypeName()
+    {
+        var controller = new TestController(ServiceStub.Create(new ApiException()));
+
+        var result = await controller.Delete(1);
+
+        var body = JsonSerializer.Serialize(Assert.IsType<ObjectResult>(result).Value);
+        Assert.DoesNotContain("ApiException", body);
+        Assert.Contains("An unexpected error occurred.", body);
+    }
+
+    [Fact]
+    public void Api_NoAnonymousResponseTypeCarriesAnExceptionProperty()
+    {
+        // guards every Results.Json / StatusCode site of MinimalBaseApi and the controllers against a regression to `exception = e`
+        var anonymous = typeof(EntityControllerBase<,,,,>).Assembly.GetTypes()
+            .Where(t => t.Name.Contains("AnonymousType") && t.GetCustomAttribute<System.Runtime.CompilerServices.CompilerGeneratedAttribute>() != null)
+            .ToList();
+
+        Assert.NotEmpty(anonymous);
+        foreach (var type in anonymous)
+        {
+            foreach (var property in type.GetProperties())
+            {
+                Assert.False(typeof(Exception).IsAssignableFrom(property.PropertyType), $"{type.Name}.{property.Name}");
+                Assert.False(property.Name.Equals("exception", StringComparison.OrdinalIgnoreCase), $"{type.Name}.{property.Name}");
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Middleware_ObsoleteTtgException_IsMappedLikeApiException()
+    {
+#pragma warning disable CS0618
+        var thrown = new TTGException("Old rule broken", new InvalidOperationException(LeakMarker),
+            Microsoft.Extensions.Logging.LogLevel.Warning, 7, HttpStatusCode.NotFound, "OLD_CODE");
+#pragma warning restore CS0618
+
+        var (status, body) = await RunMiddleware(thrown);
+
+        Assert.Equal(404, status);
+        AssertNoLeak(body);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("Old rule broken", json.RootElement.GetProperty("message").GetString());
+        Assert.Equal("OLD_CODE", json.RootElement.GetProperty("code").GetString());
+        Assert.Equal(7, json.RootElement.GetProperty("number").GetInt32());
+    }
+
+    [Fact]
+    public async Task Middleware_ApiExceptionWithDefaultMessage_SendsTheGenericMessageNotTheTypeName()
+    {
+        var (status, body) = await RunMiddleware(new ApiException());
+
+        Assert.Equal(500, status);
+        Assert.DoesNotContain("ApiException", body);
+        Assert.Contains("An unexpected error occurred.", body);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Conflict, Microsoft.Extensions.Logging.LogLevel.Error, Microsoft.Extensions.Logging.LogLevel.Warning)]
+    [InlineData(HttpStatusCode.BadRequest, Microsoft.Extensions.Logging.LogLevel.Information, Microsoft.Extensions.Logging.LogLevel.Information)]
+    [InlineData(HttpStatusCode.InternalServerError, Microsoft.Extensions.Logging.LogLevel.Information, Microsoft.Extensions.Logging.LogLevel.Error)]
+    public async Task Middleware_LogsAtTheLevelOfTheApiException_WarningAtMostBelow500_ErrorFor500(
+        HttpStatusCode status, Microsoft.Extensions.Logging.LogLevel exceptionLevel, Microsoft.Extensions.Logging.LogLevel expected)
+    {
+        var logger = new RecordingLogger();
+        var middleware = new ErrorHandlingMiddleware(_ => throw new ApiException("x", null, exceptionLevel, 1, status, "C"), logger);
+        var context = new DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+
+        await middleware.Invoke(context);
+
+        Assert.Equal(expected, Assert.Single(logger.Levels));
+    }
+
+    private sealed class RecordingLogger : Microsoft.Extensions.Logging.ILogger<ErrorHandlingMiddleware>
+    {
+        public List<Microsoft.Extensions.Logging.LogLevel> Levels { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state,
+            Exception? exception, Func<TState, Exception?, string> formatter) => Levels.Add(logLevel);
+    }
+
     public class TestEntity : IEntity
     {
         public string CreatedBy { get; set; } = "";
@@ -147,11 +284,29 @@ public class ErrorLeakTests
         public DateTimeOffset UpdatedDate { get; set; }
     }
 
-    public class TestController(IBaseService<TestEntity, int> service)
-        : EntityControllerBase<TestEntity, int, TestEntity, TestEntity, TestEntity>(
-            NullLogger.Instance, service, null, null)
+    public class TestController(IBaseService<TestEntity, int> service, bool withValidator = true)
+        : EntityControllerBase<TestEntity, int, TestEntity, CreateRequest, TestEntity>(
+            NullLogger.Instance, service, null, withValidator ? new AlwaysValid() : null)
     {
         public Task<IActionResult> Delete(int id) => DeleteEntity(id);
+        public Task<IActionResult> Create(CreateRequest request) => CreateEntity(request);
+        public Task<IActionResult> Patch(int id) =>
+            PatchEntity(id, new Microsoft.AspNetCore.JsonPatch.JsonPatchDocument<TestEntity>());
+        public Task<IActionResult> PatchJson(int id) => PatchEntityByJson(id, new System.Text.Json.Nodes.JsonObject());
+        public Task<IActionResult> DeleteMany(IEnumerable<int> ids) => DeleteEntities(ids);
+    }
+
+    public class CreateRequest
+    {
+    }
+
+    public class AlwaysValid : IValidationService<TestEntity, CreateRequest>
+    {
+        public Task<ValidationResult> Validate(TestEntity entity, CancellationToken cancellationToken) =>
+            Task.FromResult(new ValidationResult { IsValid = true });
+
+        public Task<ValidationResult> Validate(CreateRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new ValidationResult { IsValid = true });
     }
 
     /// <summary>
@@ -174,6 +329,11 @@ public class ErrorLeakTests
             if (name is "Exists" or "CanDelete")
             {
                 return Task.FromResult(true);
+            }
+
+            if (name == "GetByKey")
+            {
+                return Task.FromResult<TestEntity?>(new TestEntity());
             }
 
             if (name is "Delete" or "Create" or "UpdateChanges" or "Update")

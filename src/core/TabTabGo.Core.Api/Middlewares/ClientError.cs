@@ -12,6 +12,15 @@ internal sealed record ClientError(int Number, string? Code, string Message)
     /// <summary>Generic message used for every unhandled failure.</summary>
     public const string GenericMessage = "An unexpected error occurred.";
 
+    /// <summary>
+    /// The message of an <see cref="TabTabGo.Core.Exceptions.ApiException"/> meant for clients. <c>new ApiException()</c> carries the
+    /// framework default ("Exception of type '...' was thrown."), which names the type, so it becomes the generic message.
+    /// </summary>
+    public static string MessageOf(Exception exception) =>
+        string.IsNullOrWhiteSpace(exception.Message) || exception.Message.StartsWith("Exception of type '", StringComparison.Ordinal)
+            ? GenericMessage
+            : exception.Message;
+
     /// <summary>Creates the generic 500 body for the given code.</summary>
     public static ClientError Unexpected(string? code = null, string? message = null)
         => new(0, code, message ?? GenericMessage);
