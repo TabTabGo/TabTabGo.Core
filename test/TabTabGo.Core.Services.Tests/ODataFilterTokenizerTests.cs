@@ -264,21 +264,72 @@ public class ODataFilterTokenizerTests
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, ex.HttpStatusCode);
     }
 
+    private static string BlankRun(int blanks) => "xmlExist(a,'v') and A" + new string(' ', blanks) + "B";
+
+    // Best-of-N wall time of `repeats` runs: the minimum is the run least disturbed by other processes on a busy machine.
+    private static double BestTicks(Action run, int repeats, int rounds = 7)
+    {
+        run(); // warm up the JIT
+        var best = long.MaxValue;
+        for (var round = 0; round < rounds; round++)
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            for (var i = 0; i < repeats; i++)
+            {
+                run();
+            }
+
+            best = Math.Min(best, watch.ElapsedTicks);
+        }
+
+        return best;
+    }
+
+    /// <summary>How much longer the parser takes for 4 times the input: about 4 when linear, about 16 when quadratic.</summary>
+    private static double ScalingFactorForFourTimesTheInput(Action<string> parse)
+    {
+        var small = BlankRun((ODataFilterTokenizer.MaxFilterLength - 40) / 4);
+        var large = BlankRun(ODataFilterTokenizer.MaxFilterLength - 40);
+        // the same total work on both sides keeps the small side measurable
+        var smallTicks = BestTicks(() => { for (var i = 0; i < 4; i++) parse(small); }, 5);
+        var largeTicks = BestTicks(() => parse(large), 5);
+        return largeTicks / smallTicks;
+    }
+
     [Fact]
     public void Split_LongRunOfBlanks_IsLinear()
     {
-        // each blank used to look ahead over the rest of the run (quadratic)
-        var filter = "xmlExist(a,'v') and A" + new string(' ', ODataFilterTokenizer.MaxFilterLength - 40) + "B";
-        Split(filter); // warm up the JIT
+        // each blank used to look ahead over the rest of the run (quadratic). Compared by scaling, not by an absolute time, so a
+        // busy build machine does not fail it: linear is about 1 here (4 small parses against 1 large one), quadratic about 4.
+        var factor = ScalingFactorForFourTimesTheInput(f => Split(f));
 
-        var watch = System.Diagnostics.Stopwatch.StartNew();
-        for (var i = 0; i < 20; i++)
+        Assert.True(factor < 2.5, $"4x the input took {factor:F1}x as long per unit of work");
+    }
+
+    [Fact]
+    public void ScalingCheck_FlagsAQuadraticParser()
+    {
+        // proves the check above would catch the old behaviour: a parser that looks ahead over the rest of the run for every blank
+        static void Quadratic(string text)
         {
-            Split(filter);
+            var count = 0;
+            for (var i = 0; i < text.Length; i++)
+            {
+                for (var j = i; j < text.Length; j++)
+                {
+                    if (text[j] == ' ')
+                    {
+                        count++;
+                    }
+                }
+            }
+
+            GC.KeepAlive(count);
         }
 
-        watch.Stop();
-        Assert.True(watch.ElapsedMilliseconds < 200, $"20 parses took {watch.ElapsedMilliseconds} ms");
+        var factor = ScalingFactorForFourTimesTheInput(Quadratic);
+
+        Assert.True(factor >= 2.5, $"a quadratic parser scaled only {factor:F1}x");
     }
 
     [Fact]
