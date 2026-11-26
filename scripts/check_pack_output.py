@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Assert the output of `dotnet pack` for the TabTabGo.Core v8 line.
+"""Inspect the output of `dotnet pack` for a TabTabGo.Core release line (tested by scripts/test_check_pack_output.py).
 
 Checks, for the directory given:
-  * exactly the expected set of package ids (and one .snupkg per id when any exist or --require-snupkg),
-  * a single version for every package, equal to --version,
-  * no `-local` / prerelease version on any package or dependency range,
-  * every package depends on the same-version TabTabGo.* siblings only (no stray 0.0.0 / prerelease).
+  * EXACTLY the expected set of package ids, one package per id (no extra, no missing, no duplicate versions),
+  * one .snupkg per id (symbols are always required for a release),
+  * every package has the version --version, and no -local / prerelease version anywhere,
+  * a lib/<tfm>/ folder in every package (when --tfm is given) and a README.md (when --require-readme),
+  * every dependency has a version range, none is prerelease/-local, and every TabTabGo.* sibling dependency is exactly
+    `[<version>, )` or `<version>`: no stray 0.0.0, no floating range, no foreign version.
 
-Usage: python3 scripts/check_pack_output.py <pack-output-dir> [--version 8.0.1] [--ids Id1,Id2,...]
-Exit code 0 when green, 1 otherwise.
+Usage: python3 scripts/check_pack_output.py <dir> --version 8.0.1 --ids Id1,Id2,... [--tfm net8.0] [--require-readme]
+Exit code 0 when green, 1 otherwise (each problem is printed as a GitHub ::error::).
 """
 import argparse
 import re
@@ -17,86 +19,105 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
-DEFAULT_IDS = [
-    "TabTabGo.Core",
-    "TabTabGo.Core.Services",
-    "TabTabGo.Core.Api",
-    "TabTabGo.Data.EF",
-    "TabTabGo.Core.Country",
-    "TabTabGo.Core.Infrastructure",
-]
 PRERELEASE = re.compile(r"-[0-9A-Za-z]")
-
-
-def read_nuspec(package: Path) -> ET.Element:
-    with zipfile.ZipFile(package) as zf:
-        name = next(n for n in zf.namelist() if n.endswith(".nuspec") and "/" not in n)
-        return ET.fromstring(zf.read(name))
 
 
 def local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("pack_dir", type=Path)
-    parser.add_argument("--version", default="8.0.1")
-    parser.add_argument("--require-snupkg", action="store_true",
-                        help="fail when a .snupkg is missing (pack with -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg)")
-    parser.add_argument("--ids", default=",".join(DEFAULT_IDS), help="comma separated expected package ids")
-    args = parser.parse_args()
+def read_package(package: Path):
+    """Return (metadata element, member names) of a .nupkg."""
+    with zipfile.ZipFile(package) as zf:
+        names = zf.namelist()
+        nuspecs = [n for n in names if n.endswith(".nuspec") and "/" not in n]
+        if len(nuspecs) != 1:
+            raise ValueError(f"{package.name}: expected exactly one root .nuspec, found {len(nuspecs)}")
+        root = ET.fromstring(zf.read(nuspecs[0]))
+    meta = next((e for e in root if local(e.tag) == "metadata"), None)
+    if meta is None:
+        raise ValueError(f"{package.name}: nuspec has no metadata")
+    return meta, names
 
-    expected = set(i for i in args.ids.split(",") if i)
-    errors: list[str] = []
-    found: dict[str, str] = {}
 
-    nupkgs = sorted(p for p in args.pack_dir.rglob("*.nupkg"))
-    snupkgs = sorted(p for p in args.pack_dir.rglob("*.snupkg"))
+def inspect(pack_dir: Path, version: str, ids, tfm: str = "", require_readme: bool = False):
+    """Return (errors, found) where found maps package id -> version."""
+    expected = set(ids)
+    errors = []
+    found = {}
+    nupkgs = sorted(p for p in pack_dir.rglob("*.nupkg"))
+    snupkgs = sorted(p for p in pack_dir.rglob("*.snupkg"))
     if not nupkgs:
-        errors.append(f"no .nupkg files under {args.pack_dir}")
-
+        errors.append(f"no .nupkg files under {pack_dir}")
     for package in nupkgs:
-        meta = next(e for e in read_nuspec(package) if local(e.tag) == "metadata")
-        pid = next(e.text for e in meta if local(e.tag) == "id")
-        version = next(e.text for e in meta if local(e.tag) == "version")
+        try:
+            meta, names = read_package(package)
+        except (ValueError, zipfile.BadZipFile, ET.ParseError) as error:
+            errors.append(str(error))
+            continue
+        pid = next((e.text for e in meta if local(e.tag) == "id"), None)
+        pver = next((e.text for e in meta if local(e.tag) == "version"), None)
+        if not pid or not pver:
+            errors.append(f"{package.name}: nuspec without id or version")
+            continue
         if pid in found:
-            errors.append(f"{pid}: more than one package/version ({found[pid]}, {version})")
-        found[pid] = version
-        if version != args.version:
-            errors.append(f"{pid}: version {version} != {args.version}")
-        if "local" in version.lower() or PRERELEASE.search(version):
-            errors.append(f"{pid}: local/prerelease version {version}")
+            errors.append(f"{pid}: more than one package/version ({found[pid]}, {pver})")
+        found[pid] = pver
+        if package.name != f"{pid}.{pver}.nupkg":
+            errors.append(f"{package.name}: file name differs from the nuspec id/version {pid} {pver}")
+        if pver != version:
+            errors.append(f"{pid}: version {pver} != {version}")
+        if "local" in pver.lower() or PRERELEASE.search(pver):
+            errors.append(f"{pid}: local/prerelease version {pver}")
+        if tfm and not any(n.startswith(f"lib/{tfm}/") for n in names):
+            errors.append(f"{pid}: no lib/{tfm}/ folder")
+        if require_readme and "README.md" not in names:
+            errors.append(f"{pid}: no README.md")
         for dep in meta.iter():
             if local(dep.tag) != "dependency":
                 continue
             did, drange = dep.get("id"), dep.get("version", "")
-            if PRERELEASE.search(drange) or "local" in drange.lower():
-                errors.append(f"{pid}: prerelease/local dependency {did} {drange}")
-            if did and did.startswith("TabTabGo.") and drange != f"[{args.version}, )" and drange != args.version:
-                errors.append(f"{pid}: sibling dependency {did} range '{drange}' != '[{args.version}, )'")
-        # an empty range is also a defect
             if not drange:
                 errors.append(f"{pid}: dependency {did} has no version range")
+                continue
+            if PRERELEASE.search(drange) or "local" in drange.lower():
+                errors.append(f"{pid}: prerelease/local dependency {did} {drange}")
+            if did and did.startswith("TabTabGo.") and drange not in (f"[{version}, )", version):
+                errors.append(f"{pid}: sibling dependency {did} range '{drange}' != '[{version}, )'")
+    if set(found) != expected:
+        errors.append(f"package id set mismatch: missing={sorted(expected - set(found))} unexpected={sorted(set(found) - expected)}")
+    snupkg_ids = set()
+    for p in snupkgs:
+        if not p.name.endswith(f".{version}.snupkg"):
+            errors.append(f"{p.name}: symbols package with a different version")
+            continue
+        snupkg_ids.add(p.name[: -len(f".{version}.snupkg")])
+    if len(snupkgs) != len(snupkg_ids) or snupkg_ids != expected:
+        errors.append(f"snupkg set mismatch: missing={sorted(expected - snupkg_ids)} unexpected={sorted(snupkg_ids - expected)}")
+    return errors, found
 
-    ids = set(found)
-    if ids != expected:
-        errors.append(
-            f"package id set mismatch: missing={sorted(expected - ids)} unexpected={sorted(ids - expected)}")
 
-    snupkg_ids = {re.sub(rf"\.{re.escape(args.version)}\.snupkg$", "", p.name) for p in snupkgs}
-    if (snupkgs or args.require_snupkg) and snupkg_ids != expected:
-        errors.append(
-            f"snupkg set mismatch: missing={sorted(expected - snupkg_ids)} unexpected={sorted(snupkg_ids - expected)}")
-
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("pack_dir", type=Path)
+    parser.add_argument("--version", required=True)
+    parser.add_argument("--ids", required=True, help="comma separated expected package ids")
+    parser.add_argument("--tfm", default="")
+    parser.add_argument("--require-readme", action="store_true")
+    args = parser.parse_args(argv)
+    ids = [i for i in args.ids.split(",") if i]
+    if not ids:
+        print("::error::--ids is empty", file=sys.stderr)
+        return 1
+    errors, found = inspect(args.pack_dir, args.version, ids, args.tfm, args.require_readme)
     for pid in sorted(found):
         print(f"  {pid} {found[pid]}")
     if errors:
-        print("FAIL")
         for e in errors:
-            print(f" - {e}")
+            print(f"::error::{e}", file=sys.stderr)
+        print("FAIL")
         return 1
-    print(f"OK: {len(found)} packages, all {args.version}, {len(snupkgs)} snupkg")
+    print(f"OK: {len(found)} packages, all {args.version}, {len(ids)} snupkg")
     return 0
 
 
