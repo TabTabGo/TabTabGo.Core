@@ -290,6 +290,13 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(ids[0], "TabTabGo.Core")  # first: the others depend on it
         self.assertGreaterEqual(self.text.count("scripts/expected-packages.txt"), 3)
 
+    def test_publish_reads_the_package_list_through_the_inspectors_parser(self):
+        publish = self.job("publish")
+        # a comment line in the list must neither pass the inspection and then stop the push loop, nor reach `dotnet nuget push`
+        self.assertNotIn("< scripts/expected-packages.txt", publish)
+        self.assertNotIn("paste -sd' ' scripts/expected-packages.txt", publish)
+        self.assertEqual(publish.count("check_pack_output.py list-ids scripts/expected-packages.txt"), 2)
+
     def test_ci_does_not_hide_the_version_script_exit_code(self):
         ci = (REPO / ".github" / "workflows" / "ci.yml").read_text()
         self.assertNotIn('--version "$(python3', ci)

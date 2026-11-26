@@ -103,6 +103,25 @@ class InspectTests(unittest.TestCase):
             self.assertEqual(1, cpo.main([d, "--version", "8.0.2", "--ids", ",".join(IDS)]))
 
 
+class ListIdsTests(unittest.TestCase):
+    def test_list_ids_prints_one_clean_id_per_line(self):
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as tmp:
+            f = pathlib.Path(tmp) / "ids.txt"
+            f.write_text("# push order\nA\n\nB  # second\n")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(cpo.main(["list-ids", str(f)]), 0)
+            self.assertEqual(out.getvalue().split(), ["A", "B"])
+
+    def test_list_ids_refuses_an_empty_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = pathlib.Path(tmp) / "ids.txt"
+            f.write_text("# nothing\n")
+            self.assertEqual(cpo.main(["list-ids", str(f)]), 1)
+
+
 class LoadIdsTests(unittest.TestCase):
     def test_ids_file_and_ids_are_merged_without_duplicates(self):
         with tempfile.TemporaryDirectory() as tmp:
