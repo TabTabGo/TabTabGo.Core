@@ -103,5 +103,18 @@ class InspectTests(unittest.TestCase):
             self.assertEqual(1, cpo.main([d, "--version", "8.0.2", "--ids", ",".join(IDS)]))
 
 
+class LoadIdsTests(unittest.TestCase):
+    def test_ids_file_and_ids_are_merged_without_duplicates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = pathlib.Path(tmp) / "ids.txt"
+            f.write_text("A\n# comment\nB  # trailing\n\nA\n")
+            self.assertEqual(cpo.load_ids("C,A", f), ["C", "A", "B"])
+            self.assertEqual(cpo.load_ids("", f), ["A", "B"])
+            self.assertEqual(cpo.load_ids("X,Y", None), ["X", "Y"])
+
+    def test_nothing_given_is_empty(self):
+        self.assertEqual(cpo.load_ids("", None), [])
+
+
 if __name__ == "__main__":
     unittest.main()

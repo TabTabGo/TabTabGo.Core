@@ -97,17 +97,29 @@ def inspect(pack_dir: Path, version: str, ids, tfm: str = "", require_readme: bo
     return errors, found
 
 
+def load_ids(ids: str = "", ids_file=None):
+    """Expected ids from --ids (comma separated) and/or --ids-file (one per line, # comments allowed), without duplicates."""
+    found = [i.strip() for i in ids.split(",") if i.strip()]
+    if ids_file is not None:
+        for line in Path(ids_file).read_text().splitlines():
+            line = line.split("#", 1)[0].strip()
+            if line:
+                found.append(line)
+    return list(dict.fromkeys(found))
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("pack_dir", type=Path)
     parser.add_argument("--version", required=True)
-    parser.add_argument("--ids", required=True, help="comma separated expected package ids")
+    parser.add_argument("--ids", default="", help="comma separated expected package ids")
+    parser.add_argument("--ids-file", type=Path, help="file with one expected package id per line (scripts/expected-packages.txt)")
     parser.add_argument("--tfm", default="")
     parser.add_argument("--require-readme", action="store_true")
     args = parser.parse_args(argv)
-    ids = [i for i in args.ids.split(",") if i]
+    ids = load_ids(args.ids, args.ids_file)
     if not ids:
-        print("::error::--ids is empty", file=sys.stderr)
+        print("::error::no expected package ids (--ids or --ids-file)", file=sys.stderr)
         return 1
     errors, found = inspect(args.pack_dir, args.version, ids, args.tfm, args.require_readme)
     for pid in sorted(found):
