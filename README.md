@@ -124,7 +124,10 @@ Pass `QueryFlags.EnableTracking` when you want tracked entities.
 `UpdateChanges`, JSON patch, partial JSON update and soft delete, with hooks (`IsValidTo*`, `Pre*`, `Post*`).
 Failures are `ApiException`s: **404** when the entity does not exist, **400** when a validation hook rejects the operation
 (`Create` 2001, `Update` 4001/4002/4003, `Delete` 3001/3002). `CanDelete(ids)` returns the real answer and
-`GetDeleteValidationAsync(ids)` tells which entity blocks the delete. `Update(id, entity)` rejects a body whose key differs
+`GetDeleteValidationAsync(ids)` tells which entity blocks the delete. `GetDeleteValidationAsync(ids)` is **unscoped by design**
+(for admin or unscoped callers): it validates by key across every scope. Scoped callers use `CanDelete(ids, scope)`, and a
+rule belongs in `IsValidToDelete`, which both paths honour; a service that overrides `GetDeleteValidationAsync` or the unscoped
+delete methods makes the scoped delete answer 500 `DELETE_OVERRIDDEN` instead of silently skipping the override. `Update(id, entity)` rejects a body whose key differs
 from the route key (400, 4003).
 
 ### 4.4 OData
