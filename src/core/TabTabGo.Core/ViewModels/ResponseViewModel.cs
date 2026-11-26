@@ -18,7 +18,10 @@ public class ResponseViewModel<T>
     /// <summary>Message.</summary>
     public string? Message { get; set; }
 
-    /// <summary>Exception that caused a failure.</summary>
+    /// <summary>Always null and never serialised (D-7): an exception must not reach API clients. Log it server-side instead.</summary>
+    [Obsolete("Never populated and never serialised: exposing an exception to API clients leaks internals. Log it server-side instead. Kept only for source compatibility.")]
+    [System.Text.Json.Serialization.JsonIgnore]
+    [Newtonsoft.Json.JsonIgnore]
     public Exception? Exception { get; set; }
 
     /// <summary>The payload.</summary>

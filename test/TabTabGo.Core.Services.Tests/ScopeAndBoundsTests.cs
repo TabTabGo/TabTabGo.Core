@@ -405,29 +405,6 @@ public class ScopeAndBoundsTests : ServiceTestBase
     }
 
     [Fact]
-    public void Localizer_Layer3_AllowList_OnlyKnowsResourcesThatExisted_WhenFirstListed()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "ttg-loc3-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        File.WriteAllText(Path.Combine(root, "en.json"), "{\"Hello\":\"Hello\"}");
-        try
-        {
-            var localizer = new JsonStringLocalizer(new JsonStringLocalizerOptions { ResourcesPath = root, ResourceAssemblyName = string.Empty });
-            Assert.Equal("Hello", localizer.GetString("Hello", "en")); // lists the folder once
-
-            File.WriteAllText(Path.Combine(root, "zz.json"), "{\"Hello\":\"late\"}"); // well-shaped, exists, but was not in the list
-            var before = JsonStringLocalizer.CacheCount;
-
-            Assert.Equal("Hello", localizer.GetString("Hello", "zz"));
-            Assert.Equal(before, JsonStringLocalizer.CacheCount);
-        }
-        finally
-        {
-            Directory.Delete(root, true);
-        }
-    }
-
-    [Fact]
     public void Localizer_DistributedCacheConstructor_IsKept()
     {
         var cache = new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));

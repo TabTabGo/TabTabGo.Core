@@ -142,6 +142,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             return await Delete(id, cancellationToken);
         }
 
+        EnsureNotOverridden(nameof(Delete), new[] { typeof(TKey), typeof(CancellationToken) });
         return await DeleteLoadedAsync(id, await LoadRequiredAsync(id, scope, cancellationToken), cancellationToken);
     }
 
@@ -225,6 +226,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             return await CanDelete(id, cancellationToken);
         }
 
+        EnsureNotOverridden(nameof(CanDelete), new[] { typeof(TKey), typeof(CancellationToken) });
         return IsValidToDelete(await LoadRequiredAsync(id, scope, cancellationToken), out _);
     }
 
@@ -236,6 +238,10 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             return await CanDelete(ids, cancellationToken);
         }
 
+        EnsureNotOverridden(nameof(CanDelete), new[] { typeof(IEnumerable<TKey>), typeof(CancellationToken) });
+        // GetDeleteValidationAsync validates by key without the scope: with a key shared by two scopes it would judge the other
+        // scope's rows, so an override fails closed here (put the rule in IsValidToDelete, which both paths honour)
+        EnsureNotOverridden(nameof(GetDeleteValidationAsync), new[] { typeof(IEnumerable<TKey>), typeof(CancellationToken) });
         var entities = await LoadByKeysAsync(ids, scope, cancellationToken);
         return entities.All(e => IsValidToDelete(e, out _));
     }
@@ -248,6 +254,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             return await Delete(ids, cancellationToken);
         }
 
+        EnsureNotOverridden(nameof(Delete), new[] { typeof(IEnumerable<TKey>), typeof(CancellationToken) });
         return await DeleteLoadedAsync(await LoadByKeysAsync(ids, scope, cancellationToken), cancellationToken);
     }
 
@@ -404,11 +411,14 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
 
         // The scoped path runs UpdateChangesCore, never the 3-argument method, so an override of that method would be skipped
         // silently (its business rule or audit would not run). Fail closed and say where the extension point is.
-        if (OverridesUpdateChanges(GetType()))
+        if (IsOverridden(nameof(UpdateChanges), new[] { typeof(TKey), typeof(TEntity), typeof(CancellationToken) }))
         {
+            // the service type is logged, not sent: the ApiException message reaches the client
+            Logger.LogError(
+                "{ServiceType} overrides UpdateChanges(id, entity, cancellationToken), which the scoped update does not call; override UpdateChangesCore instead. Nothing was updated.",
+                GetType().FullName);
             throw new ApiException(
-                $"{GetType().Name} overrides UpdateChanges(id, entity, cancellationToken), which the scoped update does not call. " +
-                "Override UpdateChangesCore instead; nothing was updated.",
+                "The service overrides UpdateChanges(id, entity, cancellationToken), which the scoped update does not call. Override UpdateChangesCore instead; nothing was updated.",
                 statusCode: HttpStatusCode.InternalServerError, code: "UPDATECHANGES_OVERRIDDEN");
         }
 
@@ -427,11 +437,29 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         return updated;
     }
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> UpdateChangesOverrides = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(Type Service, string Method, string Signature), bool> Overrides = new();
 
-    private static bool OverridesUpdateChanges(Type serviceType) =>
-        UpdateChangesOverrides.GetOrAdd(serviceType, type => type.GetMethod(nameof(UpdateChanges),
-            new[] { typeof(TKey), typeof(TEntity), typeof(CancellationToken) })?.DeclaringType != typeof(BaseService<TEntity, TKey>));
+    // Whether a consumer overrides the unscoped method that a scoped variant does not call.
+    private bool IsOverridden(string method, Type[] parameterTypes) =>
+        Overrides.GetOrAdd((GetType(), method, string.Join(",", parameterTypes.Select(t => t.FullName))), key =>
+            key.Service.GetMethod(method, parameterTypes)?.DeclaringType != typeof(BaseService<TEntity, TKey>));
+
+    // The scoped delete runs its own load, validation and save, never the unscoped method; an override of that method (a business
+    // rule, an audit) would be skipped silently, so fail closed, as the scoped update does.
+    private void EnsureNotOverridden(string method, Type[] parameterTypes)
+    {
+        if (!IsOverridden(method, parameterTypes))
+        {
+            return;
+        }
+
+        Logger.LogError(
+            "{ServiceType} overrides {Method}, which the scoped variant does not call; nothing was changed. Override IsValidToDelete, PreDelete or PostDelete instead.",
+            GetType().FullName, method);
+        throw new ApiException(
+            "The service overrides a delete method that the scoped delete does not call. Override IsValidToDelete, PreDelete or PostDelete instead; nothing was deleted.",
+            statusCode: HttpStatusCode.InternalServerError, code: "DELETE_OVERRIDDEN");
+    }
 
     // The properties the patch changed on the tracked entity (name and new value) and whether a retry can replay the whole
     // change from them. Anything else in the tracker (owned or dependent entries, added or deleted rows, collection changes) or a
@@ -445,7 +473,9 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         var change = changes.FirstOrDefault(c => ReferenceEquals(c.Entity, entity));
         if (change == null)
         {
-            return (changed, replayable);
+            // Not tracked (a NoTracking-default context loads detached entities): the patch lives only on the object, so a retry
+            // that reloads would apply nothing and commit an unchanged row. Not replayable; the retry fails closed.
+            return (changed, false);
         }
 
         foreach (var (name, value) in change.CurrentValues)
@@ -473,7 +503,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             // never report done what was not done: the first attempt failed and was rolled back, and this change (owned or child
             // rows, collections, shadow properties) cannot be rebuilt from the property values alone
             throw new ApiException(
-                "A transient failure interrupted the update and it was NOT applied. Send the request again.",
+                "A transient failure interrupted the update and it could not be confirmed. Reload the entity before sending the request again.",
                 statusCode: HttpStatusCode.ServiceUnavailable, code: "RETRY_NOT_REPLAYABLE");
         }
 

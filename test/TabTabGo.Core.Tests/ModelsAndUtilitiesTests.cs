@@ -76,7 +76,48 @@ public class ModelsAndUtilitiesTests
         Assert.Equal(5, node.GetProperty("errorNumber").GetInt32());
         Assert.False(node.TryGetProperty("exception", out _));
         Assert.DoesNotContain("Exception", newtonsoft.Replace("ErrorNumber", string.Empty));
-        Assert.NotNull(response.Exception);
+#pragma warning disable CS0618
+        Assert.Null(response.Exception);
+#pragma warning restore CS0618
+    }
+
+    [Fact]
+    public void ResponseViewModels_ExceptionProperty_IsNeverSerialisedAndObsolete()
+    {
+        const string marker = "LEAKMARKER-internal-host";
+#pragma warning disable CS0618
+        var error = new ErrorResponseViewModel { Message = "m", Exception = new InvalidOperationException(marker) };
+        var generic = new TabTabGo.Core.Services.ViewModels.ResponseViewModel { Message = "m", Exception = new InvalidOperationException(marker) };
+        var withParam = new ErrorResponse("m", "c", 1, new InvalidOperationException(marker));
+        Assert.Null(withParam.Exception);
+#pragma warning restore CS0618
+
+        foreach (var model in new object[] { error, generic, withParam })
+        {
+            var stj = JsonSerializer.Serialize(model, model.GetType(), SerializerEngine.JsonSerializationSettings);
+            var nj = Nj.JsonConvert.SerializeObject(model);
+            foreach (var text in new[] { stj, nj })
+            {
+                Assert.DoesNotContain(marker, text);
+                Assert.DoesNotContain("InvalidOperationException", text);
+                Assert.DoesNotContain("xception", text.Replace("ErrorNumber", string.Empty));
+            }
+        }
+
+        foreach (var type in new[] { typeof(ErrorResponse), typeof(ErrorResponseViewModel), typeof(TabTabGo.Core.Services.ViewModels.ResponseViewModel) })
+        {
+            Assert.NotNull(Attribute.GetCustomAttribute(type.GetProperty("Exception")!, typeof(ObsoleteAttribute)));
+        }
+    }
+
+    [Fact]
+    public void ErrorResponse_FromAnApiExceptionWithTheFrameworkDefaultMessage_SendsTheGenericMessage()
+    {
+        var response = new ErrorResponse(new ApiException());
+
+        Assert.Equal("An unexpected error occurred.", response.Message);
+        Assert.DoesNotContain("ApiException", response.Message);
+        Assert.Equal("kept", new ErrorResponse(new ApiException("kept")).Message);
     }
 
     [Fact]
@@ -200,7 +241,9 @@ public class ModelsAndUtilitiesTests
         Assert.Equal(1, new PagingOptionRequest().Page);
         Assert.Equal(20, new PagingOptionRequest().PageSize);
         Assert.Equal(string.Empty, new GenericResponseViewModel().Message);
+#pragma warning disable CS0618
         Assert.Null(new ErrorResponseViewModel().Exception);
+#pragma warning restore CS0618
         Assert.Equal("m", new ErrorResponseViewModel { Message = "m" }.Message);
     }
 

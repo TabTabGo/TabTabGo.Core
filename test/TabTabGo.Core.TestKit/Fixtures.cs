@@ -31,7 +31,10 @@ public sealed class SqliteFixture : IDisposable
     /// <summary>Runs between a failed attempt and its retry (a concurrent writer committing in that window).</summary>
     public Action? OnRetry { get; set; }
 
-    /// <summary>Gives modified widgets a new concurrency token on save.</summary>
+    /// <summary>Contexts default to no-tracking queries, as a host that configures <c>UseQueryTrackingBehavior(NoTracking)</c> does.</summary>
+    public bool NoTrackingByDefault { get; set; }
+
+    /// <summary>Gives modified widgets a new concurrency version on save.</summary>
     public bool BumpVersion { get; set; }
 
     /// <summary>Adds one widget (tenant A, with a note, a token and a shadow column) and returns nothing; its id is 1.</summary>
@@ -65,6 +68,11 @@ public sealed class SqliteFixture : IDisposable
                     o.ExecutionStrategy(d => new RetryingStrategy(d, () => OnRetry?.Invoke()));
                 }
             });
+        if (NoTrackingByDefault)
+        {
+            builder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+        }
+
         var all = DefaultInterceptors.Concat(interceptors).ToArray();
         if (all.Length > 0)
         {

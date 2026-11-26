@@ -264,21 +264,82 @@ public class ODataFilterTokenizerTests
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, ex.HttpStatusCode);
     }
 
-    [Fact]
-    public void Split_LongRunOfBlanks_IsLinear()
-    {
-        // each blank used to look ahead over the rest of the run (quadratic)
-        var filter = "xmlExist(a,'v') and A" + new string(' ', ODataFilterTokenizer.MaxFilterLength - 40) + "B";
-        Split(filter); // warm up the JIT
+    private static string BlankRun(int blanks) => "xmlExist(a,'v') and A" + new string(' ', blanks) + "B";
 
-        var watch = System.Diagnostics.Stopwatch.StartNew();
-        for (var i = 0; i < 20; i++)
+    private static readonly string SmallInput = BlankRun((ODataFilterTokenizer.MaxFilterLength - 40) / 4);
+
+    private static readonly string LargeInput = BlankRun(ODataFilterTokenizer.MaxFilterLength - 40);
+
+    // Whitespace look-ahead steps a parse takes. Counted, not timed: a blank used to look ahead over the rest of its run (quadratic),
+    // which shows up as steps far beyond the input length; a clock on a shared CI runner cannot tell that apart reliably.
+    private static long StepsOf(string filter)
+    {
+        var before = ODataFilterTokenizer.LookAheadSteps;
+        Split(filter);
+        return ODataFilterTokenizer.LookAheadSteps - before;
+    }
+
+    private static void AssertStepsStayProportional(Func<string, long> stepsOf)
+    {
+        var large = stepsOf(LargeInput);
+        var small = stepsOf(SmallInput);
+
+        Assert.True(large <= 2L * LargeInput.Length, $"{large} look-ahead steps for {LargeInput.Length} characters");
+        Assert.True((double)large / small < 6, $"4x the input took {(double)large / small:F1}x the steps (linear is about 4, quadratic about 16)");
+    }
+
+    [Fact]
+    public void Split_LongRunOfBlanks_TakesLinearlyManySteps()
+    {
+        AssertStepsStayProportional(StepsOf);
+    }
+
+    [Fact]
+    public void StepCountAssertion_FailsForAQuadraticLookAhead()
+    {
+        // the same assertion over a deliberately quadratic look-ahead (every blank scans the rest of its run) must fail
+        static long QuadraticSteps(string text)
         {
-            Split(filter);
+            long steps = 0;
+            for (var i = 0; i < text.Length; i++)
+            {
+                if (text[i] != ' ')
+                {
+                    continue;
+                }
+
+                for (var j = i; j < text.Length && text[j] == ' '; j++)
+                {
+                    steps++;
+                }
+            }
+
+            return steps;
         }
 
-        watch.Stop();
-        Assert.True(watch.ElapsedMilliseconds < 200, $"20 parses took {watch.ElapsedMilliseconds} ms");
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertStepsStayProportional(QuadraticSteps));
+    }
+
+    [Fact]
+    public void StepCounter_CountsWhenTheTokenizerRuns_PositiveControl()
+    {
+        var calls = ODataFilterTokenizer.Calls;
+        var steps = ODataFilterTokenizer.LookAheadSteps;
+
+        Split("A eq 1 and xmlExist(a,'v')");
+
+        Assert.Equal(calls + 1, ODataFilterTokenizer.Calls);
+        Assert.True(ODataFilterTokenizer.LookAheadSteps > steps);
+    }
+
+    [Fact]
+    public void Split_LongRunOfBlanks_StillSplitsCorrectly()
+    {
+        var result = Split(LargeInput);
+
+        Assert.Single(result.CustomFilters);
+        Assert.StartsWith("A", result.Filter.TrimStart());
+        Assert.EndsWith("B", result.Filter.TrimEnd());
     }
 
     [Fact]

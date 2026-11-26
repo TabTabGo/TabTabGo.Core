@@ -283,6 +283,53 @@ public class CoreOverridingProductService(IUnitOfWork unitOfWork, ILogger<BaseSe
     }
 }
 
+/// <summary>A product service whose update answers a different object than the one it was given, as a retry on a fresh load does.</summary>
+public class ReturningFreshEntityProductService(IUnitOfWork unitOfWork, ILogger<BaseService<Product, int>> logger) : TestProductService(unitOfWork, logger)
+{
+    protected override async Task<Product> UpdateChangesCore(int id, Product entity, Expression<Func<Product, bool>>? scope, CancellationToken cancellationToken)
+    {
+        var saved = await base.UpdateChangesCore(id, entity, scope, cancellationToken);
+        return new Product { Id = saved.Id, Name = "returned-by-service", Tenant = saved.Tenant, CategoryId = saved.CategoryId };
+    }
+}
+
+/// <summary>A product service that overrides the unscoped delete methods, as a business rule or an audit would.</summary>
+public class OverridingDeleteProductService(IUnitOfWork unitOfWork, ILogger<BaseService<Product, int>> logger) : TestProductService(unitOfWork, logger)
+{
+    public int OverrideCalls { get; private set; }
+
+    public override Task<Product> Delete(int id, CancellationToken cancellationToken = default)
+    {
+        OverrideCalls++;
+        return base.Delete(id, cancellationToken);
+    }
+
+    public override Task<IEnumerable<Product>> Delete(IEnumerable<int> ids, CancellationToken cancellationToken)
+    {
+        OverrideCalls++;
+        return base.Delete(ids, cancellationToken);
+    }
+
+    public override Task<bool> CanDelete(int id, CancellationToken cancellationToken = default)
+    {
+        OverrideCalls++;
+        return base.CanDelete(id, cancellationToken);
+    }
+
+    public override Task<bool> CanDelete(IEnumerable<int> ids, CancellationToken cancellationToken)
+    {
+        OverrideCalls++;
+        return base.CanDelete(ids, cancellationToken);
+    }
+}
+
+/// <summary>A product service that overrides <c>GetDeleteValidationAsync</c> (the unscoped CanDelete(ids) goes through it) and refuses one key.</summary>
+public class ValidationOverridingProductService(IUnitOfWork unitOfWork, ILogger<BaseService<Product, int>> logger, int refuse = 2) : TestProductService(unitOfWork, logger)
+{
+    public override Task<IReadOnlyList<(int Id, bool CanDelete, string Error)>> GetDeleteValidationAsync(IEnumerable<int> ids, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<(int Id, bool CanDelete, string Error)>>(ids.Select(i => (i, i != refuse, i == refuse ? "refused by the override" : string.Empty)).ToList());
+}
+
 /// <summary>Unit of work that implements only the 8.x members (the default interface methods fill the rest).</summary>
 public class MinimalUnitOfWork : IUnitOfWork
 {

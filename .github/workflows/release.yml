@@ -1,0 +1,291 @@
+name: Release
+
+# Tag-driven publish of the TabTabGo.Core v11 (net11.0) line to nuget.org. The file name is fixed: the nuget.org trusted-publishing
+# policy pins it. Do not rename this file.
+# Nothing publishes on a push to a branch or on a pull request. A release tag needs a manual approval (environment nuget-stable).
+#
+# Security properties (do not weaken; scripts/test_release_verify.py asserts several of them):
+#   * The tag is validated against a strict stable-only pattern BEFORE it is used anywhere, resolved only as refs/tags/<tag>,
+#     and the commit it points at is what gets built (never a branch of the same name).
+#   * Inputs and context values reach shell steps only through env:, never interpolated into run:.
+#   * Authorization is not github.actor alone: a re-run keeps the original actor, so the triggering actor must equal the actor and
+#     run_attempt must be 1. A re-run needs a fresh tag push.
+#   * Publishing fails closed: it requires the repository variable STABLE_PUBLISH_MODE=environment, which attests that the protected
+#     `nuget-stable` environment (required reviewers) exists. Unset or any other value refuses to publish.
+#   * workflow_dispatch is a DRY RUN only (guard, build, test, pack, inspect on an existing stable tag): it never publishes.
+#   * Authentication is NuGet trusted publishing (OIDC, short-lived key). There is no API key anywhere in the repository or its secrets.
+#   * This workflow builds and tests the tagged commit itself; it never trusts or reuses an earlier CI run.
+#   * All packages are pushed by ONE job, in dependency order, without the skip-duplicate option. Everything that can fail (guard, build,
+#     tests, vulnerability gate, inspection, "not already on nuget.org") runs BEFORE the first push. A push that fails midway
+#     (network, nuget.org outage) leaves the packages already pushed on nuget.org: nuget.org cannot un-publish, so that state cannot
+#     be rolled back; unlist the pushed versions and release the next patch version.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing stable tag to dry-run (guard, build, test, pack, inspect; nothing is published), for example v11.0.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+jobs:
+  guard:
+    name: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      sha: ${{ steps.resolve.outputs.sha }}
+      version: ${{ steps.verify.outputs.version }}
+      dry_run: ${{ steps.authorize.outputs.dry_run }}
+    steps:
+      - name: Authorize the run
+        id: authorize
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          EVENT_NAME: ${{ github.event_name }}
+          PUBLISH_MODE: ${{ vars.STABLE_PUBLISH_MODE }}
+        run: |
+          set -euo pipefail
+          if [ "$ACTOR" != "$TRIGGERING_ACTOR" ]; then echo "::error::triggering actor differs from actor (re-run by another user)"; exit 1; fi
+          if [ "$RUN_ATTEMPT" != "1" ]; then echo "::error::re-runs are refused; push a new tag or dispatch a new run"; exit 1; fi
+          dry=true
+          if [ "$EVENT_NAME" = "push" ]; then
+            dry=false
+            if [ "$PUBLISH_MODE" != "environment" ]; then
+              echo "::error::STABLE_PUBLISH_MODE is not 'environment'; refusing to publish (fail closed)"; exit 1
+            fi
+          fi
+          echo "dry_run=$dry" >> "$GITHUB_OUTPUT"
+
+      - name: Validate the tag
+        id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then tag="$DISPATCH_TAG"; else
+            if [ "$REF_TYPE" != "tag" ]; then echo "::error::not a tag ref"; exit 1; fi
+            tag="$REF_NAME"
+          fi
+          re='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          if [[ "$tag" == *$'\n'* ]] || ! [[ "$tag" =~ $re ]]; then
+            echo "::error::only stable vMAJOR.MINOR.PATCH tags are released (no pre-release suffix, no build metadata)"; exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the tag explicitly
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ steps.tag.outputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve the tagged commit
+        id: resolve
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse "refs/tags/${TAG}^{commit}")"
+          head="$(git rev-parse HEAD)"
+          if [ "$sha" != "$head" ]; then echo "::error::checked-out commit is not the tag's commit"; exit 1; fi
+          if [ "$EVENT_NAME" = "push" ] && [ "$sha" != "$EVENT_SHA" ]; then echo "::error::tag commit differs from the pushed commit"; exit 1; fi
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::not a commit hash"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag, version, target framework, release branch and dependencies
+        id: verify
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # Stable-only tag, tag = version of every packable project, tag major = target framework major, tagged commit on a
+          # releases/vM.m.x/* branch, no pre-release/floating/-local dependency. A script, not pipelines: `x | grep -q` under
+          # pipefail fails at random with SIGPIPE.
+          branches="$(git branch -r --contains "$SHA" | sed 's/^[* ]*//')"
+          python3 scripts/release_verify.py tag "$TAG" --branches "$branches" >> "$GITHUB_OUTPUT"
+          python3 -m unittest discover -s scripts -p 'test_*.py'
+
+  build-test-pack:
+    name: build-test-pack
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+    steps:
+      - name: Checkout the validated commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup .NET (SDK from global.json)
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore (the ApiCompat reference packs and baseline packages are restored for any configuration)
+        run: dotnet restore TabTabGo.Core.sln
+
+      - name: Build (warnings are errors; the ApiCompat gate runs in this build)
+        run: dotnet build TabTabGo.Core.sln -c Release -warnaserror --no-restore
+
+      - name: ApiCompat baseline is the published, hash-pinned package (fails closed until scripts/baseline.json carries the hashes)
+        run: python3 scripts/release_verify.py baseline --packages-dir "${NUGET_PACKAGES:-$HOME/.nuget/packages}"
+
+      - name: Test
+        run: dotnet test --solution TabTabGo.Core.sln -c Release --no-build
+
+      - name: Vulnerable and deprecated packages (fails closed)
+        run: |
+          set -euo pipefail
+          dotnet list TabTabGo.Core.sln package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
+          dotnet list TabTabGo.Core.sln package --deprecated 2>&1 | tee deprecated.txt
+          # `dotnet list` exits 0 even when it cannot read the audit data; the script fails closed on that too.
+          # Deprecation is judged on shipped projects only (a legacy test-framework package is not a shipped dependency).
+          python3 scripts/release_verify.py audit --kind vulnerable --file vulnerable.txt
+          python3 scripts/release_verify.py audit --kind deprecated --file deprecated.txt --ignore-project '\.(Tests?|TestKit)$'
+
+      - name: Pack
+        run: dotnet pack TabTabGo.Core.sln -c Release --no-build -p:Version="$VERSION" -p:ContinuousIntegrationBuild=true -o out
+
+      - name: Inspect the packages (exact id set, version, snupkg, dependencies)
+        run: python3 scripts/check_pack_output.py out --version "$VERSION" --ids-file scripts/expected-packages.txt --tfm net11.0 --require-readme --require-license
+
+      - name: Upload packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages
+          path: out
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: [guard, build-test-pack]
+    if: needs.guard.outputs.dry_run == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Waits for a required reviewer of the nuget-stable environment.
+    environment: nuget-stable
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+    steps:
+      - name: Re-check the authorization context
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          PUBLISH_MODE: ${{ vars.STABLE_PUBLISH_MODE }}
+        run: |
+          set -euo pipefail
+          [ "$ACTOR" = "$TRIGGERING_ACTOR" ] && [ "$RUN_ATTEMPT" = "1" ] && [ "$PUBLISH_MODE" = "environment" ]
+
+      # The commit the guard resolved, not the tag: a tag can be moved after the approval. Checked out BEFORE the download, and the
+      # packages go to the runner temp dir, so nothing the checkout does to the workspace can touch them.
+      - name: Checkout the validated commit (scripts only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+          sparse-checkout: scripts
+          persist-credentials: false
+
+      - name: Download packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: ${{ runner.temp }}/out
+
+      - name: Re-inspect the downloaded packages
+        run: python3 scripts/check_pack_output.py "$RUNNER_TEMP/out" --version "$VERSION" --ids-file scripts/expected-packages.txt --tfm net11.0 --require-readme --require-license
+
+      - name: Refuse a version that is already on nuget.org (a re-run must fail, not look green)
+        run: |
+          set -euo pipefail
+          expected="$(python3 scripts/check_pack_output.py list-ids scripts/expected-packages.txt | paste -sd' ' -)"
+          python3 scripts/release_verify.py not-published --expected "$expected" --version "$VERSION"
+
+      - name: Require the trusted-publishing user
+        env:
+          NUGET_USER: ${{ vars.NUGET_USER }}
+        run: |
+          [ -n "$NUGET_USER" ] || { echo "::error::repository variable NUGET_USER is not set (nuget.org profile name for trusted publishing)"; exit 1; }
+
+      - name: NuGet trusted publishing login (short-lived key)
+        id: login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push every package to nuget.org (one job, dependency order, stops at the first failure)
+        env:
+          NUGET_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          # `dotnet nuget push X.nupkg` also pushes the sibling X.snupkg to the nuget.org symbol server.
+          # an array, not `while read`: dotnet would read the rest of the list from stdin
+          # the list goes through the inspector's parser (comments and blank lines stripped), so the push set is the inspected set
+          list="$(python3 scripts/check_pack_output.py list-ids scripts/expected-packages.txt)"
+          mapfile -t ids <<< "$list"
+          for id in "${ids[@]}"; do
+            dotnet nuget push "$RUNNER_TEMP/out/${id}.${VERSION}.nupkg" --api-key "$NUGET_KEY" --source https://api.nuget.org/v3/index.json
+          done
+
+  github-release:
+    name: github-release
+    needs: [guard, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: out
+
+      - name: Create the GitHub release (only when the tag still points at the published commit)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.guard.outputs.tag }}
+          SHA: ${{ needs.guard.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # a tag can be moved after the approval; resolve it again through the API (dereferencing annotated tags) and compare
+          type="$(gh api "repos/${GH_REPO}/git/ref/tags/${TAG}" --jq .object.type)"
+          resolved="$(gh api "repos/${GH_REPO}/git/ref/tags/${TAG}" --jq .object.sha)"
+          while [ "$type" = "tag" ]; do
+            type="$(gh api "repos/${GH_REPO}/git/tags/${resolved}" --jq .object.type)"
+            resolved="$(gh api "repos/${GH_REPO}/git/tags/${resolved}" --jq .object.sha)"
+          done
+          if [ "$resolved" != "$SHA" ]; then
+            echo "::error::tag ${TAG} now points at ${resolved}, not at the published commit ${SHA}; no release is created"; exit 1
+          fi
+          gh release create "$TAG" out/*.nupkg out/*.snupkg --verify-tag --generate-notes

@@ -302,9 +302,9 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
 
             // saved inside a transaction that the database scope check can veto (foreign keys and navigations count there);
             // the scope is never evaluated in memory: a predicate over a navigation that is not loaded would throw
-            await _currentService.UpdateChanges(id, entity, GetFixCriteria, cancellationToken);
+            var updated = await _currentService.UpdateChanges(id, entity, GetFixCriteria, cancellationToken);
 
-            return (null, entity);
+            return (null, updated);
         }
         catch (ApiException ex)
         {
@@ -384,9 +384,10 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
                 return BadRequestBody("Invalid patch request", "INVALID_PATCH_REQUEST", validationResult);
             }
 
-            await _currentService.UpdateChanges(id, entity, GetFixCriteria, cancellationToken);
+            // the returned entity, not the patched one: after a retry the service works on a fresh load
+            var updated = await _currentService.UpdateChanges(id, entity, GetFixCriteria, cancellationToken);
 
-            return Ok(entity);
+            return _mapper == null ? Ok(updated) : Ok(_mapper.MapToViewModel(updated));
         }
         catch (ApiException ex)
         {
