@@ -165,6 +165,29 @@ public sealed class FailOnceAfterWrite : Microsoft.EntityFrameworkCore.Diagnosti
     }
 }
 
+/// <summary>
+/// Throws <see cref="TransientTestException"/> once while the transaction is being opened: a failure before the operation of
+/// <c>ExecuteInTransactionAsync</c> has run at all.
+/// </summary>
+public sealed class FailOnceOnTransactionStart : Microsoft.EntityFrameworkCore.Diagnostics.DbTransactionInterceptor
+{
+    /// <summary>How many times the failure was raised.</summary>
+    public int Failures { get; private set; }
+
+    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbTransaction>> TransactionStartingAsync(
+        System.Data.Common.DbConnection connection, Microsoft.EntityFrameworkCore.Diagnostics.TransactionStartingEventData eventData,
+        Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbTransaction> result, CancellationToken cancellationToken = default)
+    {
+        if (Failures == 0)
+        {
+            Failures++;
+            throw new TransientTestException();
+        }
+
+        return ValueTask.FromResult(result);
+    }
+}
+
 /// <summary>The transient failure <see cref="RetryingStrategy"/> retries on.</summary>
 public sealed class TransientTestException() : Exception("transient");
 
