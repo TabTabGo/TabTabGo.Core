@@ -149,8 +149,8 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Restore (as Release, because the ApiCompat reference packs and baseline packages are restored only for Release)
-        run: dotnet restore TabTabGo.Core.sln -p:Configuration=Release
+      - name: Restore (the ApiCompat reference packs and baseline packages are restored for any configuration)
+        run: dotnet restore TabTabGo.Core.sln
 
       - name: Build (warnings are errors; the ApiCompat gate runs in this build)
         run: dotnet build TabTabGo.Core.sln -c Release -warnaserror --no-restore
