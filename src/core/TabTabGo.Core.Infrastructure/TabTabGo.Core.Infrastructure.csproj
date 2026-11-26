@@ -9,6 +9,7 @@
     <Copyright>TabTabGo</Copyright>
     <PackageIcon>logo@32.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReadmeLocal>true</PackageReadmeLocal>
     <RepositoryUrl>https://github.com/TabTabGo/TabTabGo.Core</RepositoryUrl>
     <PackageTags>Core, Infrastructure, Repository, UnitOfWork</PackageTags>
     <LangVersion>latest</LangVersion>

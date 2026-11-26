@@ -5,11 +5,11 @@ Checks, for the directory given:
   * EXACTLY the expected set of package ids, one package per id (no extra, no missing, no duplicate versions),
   * one .snupkg per id (symbols are always required for a release),
   * every package has the version --version, and no -local / prerelease version anywhere,
-  * a lib/<tfm>/ folder in every package (when --tfm is given) and a README.md (when --require-readme),
+  * a lib/<tfm>/ folder in every package (when --tfm is given) and a README.md (when --require-readme), a licence expression (when --require-license),
   * every dependency has a version range, none is prerelease/-local, and every TabTabGo.* sibling dependency is exactly
     `[<version>, )` or `<version>`: no stray 0.0.0, no floating range, no foreign version.
 
-Usage: python3 scripts/check_pack_output.py <dir> --version 8.0.1 --ids Id1,Id2,... [--tfm net8.0] [--require-readme]
+Usage: python3 scripts/check_pack_output.py <dir> --version 8.0.1 --ids Id1,Id2,... [--tfm net8.0] [--require-readme] [--require-license]
 Exit code 0 when green, 1 otherwise (each problem is printed as a GitHub ::error::).
 """
 import argparse
@@ -40,7 +40,7 @@ def read_package(package: Path):
     return meta, names
 
 
-def inspect(pack_dir: Path, version: str, ids, tfm: str = "", require_readme: bool = False):
+def inspect(pack_dir: Path, version: str, ids, tfm: str = "", require_readme: bool = False, require_license: bool = False):
     """Return (errors, found) where found maps package id -> version."""
     expected = set(ids)
     errors = []
@@ -73,6 +73,10 @@ def inspect(pack_dir: Path, version: str, ids, tfm: str = "", require_readme: bo
             errors.append(f"{pid}: no lib/{tfm}/ folder")
         if require_readme and "README.md" not in names:
             errors.append(f"{pid}: no README.md")
+        if require_license:
+            licenses = [e for e in meta if local(e.tag) == "license"]
+            if not any(e.get("type") == "expression" and (e.text or "").strip() for e in licenses):
+                errors.append(f"{pid}: no licence expression")
         for dep in meta.iter():
             if local(dep.tag) != "dependency":
                 continue
@@ -125,12 +129,13 @@ def main(argv=None) -> int:
     parser.add_argument("--ids-file", type=Path, help="file with one expected package id per line (scripts/expected-packages.txt)")
     parser.add_argument("--tfm", default="")
     parser.add_argument("--require-readme", action="store_true")
+    parser.add_argument("--require-license", action="store_true", help="every package carries a licence expression (<license type=\"expression\">)")
     args = parser.parse_args(argv)
     ids = load_ids(args.ids, args.ids_file)
     if not ids:
         print("::error::no expected package ids (--ids or --ids-file)", file=sys.stderr)
         return 1
-    errors, found = inspect(args.pack_dir, args.version, ids, args.tfm, args.require_readme)
+    errors, found = inspect(args.pack_dir, args.version, ids, args.tfm, args.require_readme, args.require_license)
     for pid in sorted(found):
         print(f"  {pid} {found[pid]}")
     if errors:

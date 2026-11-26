@@ -170,7 +170,7 @@ jobs:
         run: dotnet pack TabTabGo.Core.sln -c Release --no-build -p:Version="$VERSION" -p:ContinuousIntegrationBuild=true -o out
 
       - name: Inspect the packages (exact id set, version, snupkg, dependencies)
-        run: python3 scripts/check_pack_output.py out --version "$VERSION" --ids-file scripts/expected-packages.txt --tfm net8.0
+        run: python3 scripts/check_pack_output.py out --version "$VERSION" --ids-file scripts/expected-packages.txt --tfm net8.0 --require-readme --require-license
 
       - name: Upload packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -219,7 +219,7 @@ jobs:
           path: ${{ runner.temp }}/out
 
       - name: Re-inspect the downloaded packages
-        run: python3 scripts/check_pack_output.py "$RUNNER_TEMP/out" --version "$VERSION" --ids-file scripts/expected-packages.txt --tfm net8.0
+        run: python3 scripts/check_pack_output.py "$RUNNER_TEMP/out" --version "$VERSION" --ids-file scripts/expected-packages.txt --tfm net8.0 --require-readme --require-license
 
       - name: Refuse a version that is already on nuget.org (a re-run must fail, not look green)
         run: |

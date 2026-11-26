@@ -7,4 +7,24 @@
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true' or '$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
+  <!-- Package metadata shared by every packable project (the same as the 10.x and 11.x lines ship). -->
+  <PropertyGroup>
+    <Authors>TabTabGo</Authors>
+    <Company>TabTabGo</Company>
+    <Copyright>Copyright (c) TabTabGo</Copyright>
+    <RepositoryUrl>https://github.com/TabTabGo/TabTabGo.Core</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/TabTabGo/TabTabGo.Core</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>logo@32.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- XML documentation ships with the packages; the 8.x code base is largely undocumented, so missing-comment warnings stay off. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1570;CS1571;CS1572;CS1573;CS1574;CS1580;CS1584;CS1587;CS1658;CS1711;CS1712;CS1734</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' != 'false' and '$(PackageReadmeLocal)' != 'true'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
 </Project>
