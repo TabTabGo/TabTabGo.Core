@@ -8,7 +8,7 @@ ASP.NET Core **entity routes**, middlewares, and a JSON layer that works with bo
 
 | Line | Runtime | Package version | Notes |
 |---|---|---|---|
-| **8.x** | .NET 8 (support ends 2026-11-10) | 8.0.1 | bridge release: vulnerable packages cleared, no code changes |
+| **8.x** | .NET 8 (support ends 2026-11-10) | 8.0.1 | bridge release: vulnerable packages cleared; security fix: exceptions are no longer serialised to API clients (R4-2) |
 | 10.x | .NET 10 (LTS to 2028-11-14) | 10.0.0 | every package latest stable, all known bugs fixed, STJ + Newtonsoft interop, full tests |
 | **11.x** (this branch) | .NET 11 (GA) | **11.0.0** | retarget of 10.x: net11.0, EF Core 11, latest packages, same API and behaviour |
 
@@ -363,8 +363,8 @@ becomes `ApiException`; `ISecurityService` and `IParseClaimsPrincipal` are gener
   language version, nullable, NuGet audit (vulnerabilities fail the build) and package metadata;
   `Directory.Packages.props` holds every package version (central package management).
 * `dotnet build -c Release -warnaserror` must be clean. `dotnet pack -c Release` produces the six packages; package
-  validation compares against `8.0.1-alpha-01`.
-* Publishing is driven by version tags (`v11.0.0`, `v11.0.0-rc.1`).
+  validation compares against the pinned `8.0.1-alpha-01` package until the published `10.0.0` exists; the baseline then moves to `10.0.0`.
+* Publishing is driven by stable version tags only (`v11.0.0`); pre-release tags are refused.
 
 ## 9. License
 
