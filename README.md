@@ -16,10 +16,18 @@ This .NET 8 Core Library is designed as a foundational framework that provides e
 - **`ErrorHandlingMiddleware` answers with the exception's own status code.** An `ApiException` (or the obsolete `TTGException`)
   keeps its HTTP status, code and number (it used to be 500 for everything). Bodies are `{number, code, message}`; any other
   exception is a 500 with a generic message. BookingCentral uses this middleware.
-- **Patch validation is no longer inverted** (backport of B25): `PatchEntity` and the minimal-API PATCH route answered 400 for a
-  valid patch and saved an invalid one; they now reject an invalid patch with 400 `INVALID_PATCH_REQUEST` and save a valid one.
+- **Patch validation is no longer inverted** (backport of B25): `EntityControllerBase.PatchEntity` answered 400 for a valid patch and
+  saved an invalid one; it now rejects an invalid patch with 400 `INVALID_PATCH_REQUEST` and saves a valid one. The minimal-API PATCH
+  route carries the same one-line fix, but the route table cannot start on 8.x (see the known issue below).
 - `TabTabGo.Core.Infrastructure` is back (the three `TabTabGo.Core.Infrastructure.Data` interfaces of 8.0.0-alpha-2), as a
   compatibility-only package.
+
+## Known issues in 8.0.1
+
+**Known issue (D-12): `MapEntityRoutes` does not start on 8.x.** Building the endpoints throws `InvalidOperationException: Body was
+inferred but the method does not allow inferred body parameters`, because AspNetCore.OData 8.x has no minimal-API binding for
+`ODataQueryOptions<T>` (added in 9.4.0). This affects every 8.0.x release. Use `EntityControllerBase`, or move to TabTabGo.Core.Api
+10.0.0 (AspNetCore.OData 9.5.0).
 
 ## Getting Started
 
