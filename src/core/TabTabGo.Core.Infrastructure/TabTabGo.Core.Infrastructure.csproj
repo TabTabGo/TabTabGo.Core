@@ -1,18 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <PackageVersion>$(VersionSuffix)</PackageVersion>
     <Title>TabTabGo Core Infrastructure</Title>
+    <Authors>TabTabGo</Authors>
     <Description>Main infrastructres Interfaces to be used by any system</Description>
     <Copyright>TabTabGo</Copyright>
     <PackageIcon>logo@32.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/TabTabGo/TabTabGo.Core</RepositoryUrl>
+    <PackageTags>Core, Infrastructure, Repository, UnitOfWork</PackageTags>
     <LangVersion>latest</LangVersion>
     <Version>8.0.1</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- IGenericRepository exposes Newtonsoft.Json.Linq.JObject in its public API -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\TabTabGo.Core\TabTabGo.Core.csproj" />
@@ -24,6 +32,6 @@
       <PackagePath></PackagePath>
       <Link>logo@32.png</Link>
     </None>
+    <None Include="README.md" Pack="true" PackagePath="" />
   </ItemGroup>
-
 </Project>
