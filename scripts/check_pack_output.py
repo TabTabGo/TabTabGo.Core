@@ -109,6 +109,15 @@ def load_ids(ids: str = "", ids_file=None):
 
 
 def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "list-ids":
+        # the workflow pushes exactly what the inspector checked: same parser (comments and blank lines stripped)
+        ids = load_ids("", Path(argv[1])) if len(argv) == 2 else []
+        if not ids:
+            print("::error::usage: check_pack_output.py list-ids <file with at least one id>", file=sys.stderr)
+            return 1
+        print("\n".join(ids))
+        return 0
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("pack_dir", type=Path)
     parser.add_argument("--version", required=True)

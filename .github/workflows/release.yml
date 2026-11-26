@@ -227,7 +227,7 @@ jobs:
       - name: Refuse a version that is already on nuget.org (a re-run must fail, not look green)
         run: |
           set -euo pipefail
-          expected="$(paste -sd' ' scripts/expected-packages.txt)"
+          expected="$(python3 scripts/check_pack_output.py list-ids scripts/expected-packages.txt | paste -sd' ' -)"
           python3 scripts/release_verify.py not-published --expected "$expected" --version "$VERSION"
 
       - name: Require the trusted-publishing user
@@ -249,7 +249,9 @@ jobs:
           set -euo pipefail
           # `dotnet nuget push X.nupkg` also pushes the sibling X.snupkg to the nuget.org symbol server.
           # an array, not `while read`: dotnet would read the rest of the list from stdin
-          mapfile -t ids < scripts/expected-packages.txt
+          # the list goes through the inspector's parser (comments and blank lines stripped), so the push set is the inspected set
+          list="$(python3 scripts/check_pack_output.py list-ids scripts/expected-packages.txt)"
+          mapfile -t ids <<< "$list"
           for id in "${ids[@]}"; do
             dotnet nuget push "$RUNNER_TEMP/out/${id}.${VERSION}.nupkg" --api-key "$NUGET_KEY" --source https://api.nuget.org/v3/index.json
           done
