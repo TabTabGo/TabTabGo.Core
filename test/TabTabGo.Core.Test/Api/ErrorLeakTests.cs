@@ -95,6 +95,15 @@ public class ErrorLeakTests
     }
 
     [Fact]
+    public void ErrorResponse_FromAnApiExceptionWithTheFrameworkDefaultMessage_SendsTheGenericMessage()
+    {
+        var response = new ErrorResponse(new ApiException());
+
+        Assert.Equal("An unexpected error occurred.", response.Message);
+        Assert.Equal("kept", new ErrorResponse(new ApiException("kept")).Message);
+    }
+
+    [Fact]
     public void ResponseViewModels_ExceptionProperty_IsNeverSerialised()
     {
 #pragma warning disable CS0618
