@@ -14,12 +14,12 @@
     <LangVersion>latest</LangVersion>
     <Version>8.0.1</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <NoWarn>$(NoWarn);CS1591;CS1570;CS1571;CS1572;CS1573;CS1712</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- IGenericRepository exposes Newtonsoft.Json.Linq.JObject in its public API -->
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
   <ItemGroup>

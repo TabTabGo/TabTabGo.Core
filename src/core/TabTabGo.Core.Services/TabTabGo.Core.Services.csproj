@@ -10,7 +10,6 @@
     <PackageIcon>logo@32.png</PackageIcon>
     <RepositoryUrl>https://github.com/TabTabGo/TabTabGo.Core</RepositoryUrl>
     <PackageTags>Services Core</PackageTags>
-    <PackageVersion>$(VersionSuffix)</PackageVersion>
     <LangVersion>latest</LangVersion>
     <Version>8.0.1</Version>
   </PropertyGroup>
