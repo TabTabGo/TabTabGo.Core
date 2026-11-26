@@ -65,4 +65,7 @@ jobs:
         run: dotnet pack TabTabGo.Core.sln -c Release --no-build -p:ContinuousIntegrationBuild=true -o out
 
       - name: Inspect the packages (exact id set, snupkg, dependencies)
-        run: python3 scripts/check_pack_output.py out --version "$(python3 scripts/release_verify.py version)" --ids "TabTabGo.Core,TabTabGo.Core.Services,TabTabGo.Core.Api,TabTabGo.Data.EF,TabTabGo.Core.Country,TabTabGo.IO.Utilities" --tfm net10.0 --require-readme
+        run: |
+          set -euo pipefail
+          version="$(python3 scripts/release_verify.py version)"
+          python3 scripts/check_pack_output.py out --version "$version" --ids-file scripts/expected-packages.txt --tfm net10.0 --require-readme

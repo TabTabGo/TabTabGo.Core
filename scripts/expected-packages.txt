@@ -1,0 +1,6 @@
+TabTabGo.Core
+TabTabGo.Core.Services
+TabTabGo.Core.Api
+TabTabGo.Data.EF
+TabTabGo.Core.Country
+TabTabGo.IO.Utilities

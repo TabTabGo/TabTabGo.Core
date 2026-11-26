@@ -253,6 +253,49 @@ class WorkflowTests(unittest.TestCase):
     def test_no_pull_request_trigger(self):
         self.assertNotIn("pull_request", self.text)
 
+    def job(self, name):
+        match = re.search(rf"^  {re.escape(name)}:\n(.*?)(?=^  [a-z][\w-]*:\n|\Z)", self.text, re.M | re.S)
+        self.assertIsNotNone(match, name)
+        return match.group(1)
+
+    def test_publish_checks_out_before_it_downloads_and_downloads_outside_the_workspace(self):
+        publish = self.job("publish")
+        # actions/checkout empties a workspace that has no .git: a download made before it would be wiped
+        self.assertLess(publish.index("actions/checkout@"), publish.index("actions/download-artifact@"))
+        self.assertRegex(publish, r"path: \$\{\{ runner\.temp \}\}/out")
+        self.assertNotIn("check_pack_output.py out ", publish)
+        self.assertNotIn('"out/', publish)
+        self.assertIn('"$RUNNER_TEMP/out/', publish)
+
+    def test_publish_trusts_the_resolved_commit_not_the_movable_tag(self):
+        publish = self.job("publish")
+        self.assertIn("ref: ${{ needs.guard.outputs.sha }}", publish)
+        self.assertNotIn("refs/tags/", publish)
+
+    def test_github_release_checks_that_the_tag_still_points_at_the_published_commit(self):
+        release = self.job("github-release")
+        self.assertIn("git/ref/tags/", release)
+        self.assertIn("git/tags/", release)  # annotated tags are dereferenced
+        self.assertIn("SHA: ${{ needs.guard.outputs.sha }}", release)
+        self.assertLess(release.index('"$resolved" != "$SHA"'), release.index("gh release create"))
+
+    def test_publish_runs_only_on_an_explicit_false_dry_run(self):
+        self.assertIn("if: needs.guard.outputs.dry_run == 'false'", self.job("publish"))
+        self.assertNotIn("dry_run != 'true'", self.text)
+
+    def test_expected_packages_come_from_one_file(self):
+        self.assertNotIn("EXPECTED_PACKAGES", self.text)
+        ids = (REPO / "scripts" / "expected-packages.txt").read_text().split()
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(ids[0], "TabTabGo.Core")  # first: the others depend on it
+        self.assertGreaterEqual(self.text.count("scripts/expected-packages.txt"), 3)
+
+    def test_ci_does_not_hide_the_version_script_exit_code(self):
+        ci = (REPO / ".github" / "workflows" / "ci.yml").read_text()
+        self.assertNotIn('--version "$(python3', ci)
+        self.assertIn('version="$(python3 scripts/release_verify.py version)"', ci)
+        self.assertIn("scripts/expected-packages.txt", ci)
+
 
 if __name__ == "__main__":
     unittest.main()
