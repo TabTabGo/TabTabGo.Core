@@ -4,13 +4,11 @@
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <PackageVersion>8.0.1</PackageVersion>
         <Title>TabTabGo Data EF</Title>
         <Authors>TabTabGo</Authors>
         <Description>TabTabGo implemntations for EF infrastructure  </Description>
         <Copyright>TabTabGo</Copyright>
         <PackageProjectUrl>https://github.com/TabTabGo/TabTabGo.Core</PackageProjectUrl>
-        <PackageVersion>$(VersionSuffix)</PackageVersion>
         <PackageIcon>logo@32.png</PackageIcon>
         <LangVersion>latest</LangVersion>
         <Version>8.0.1</Version>
