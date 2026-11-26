@@ -49,9 +49,15 @@ internal static class ApiErrorResponses
 {
     internal static string TraceId(HttpContext context) => Activity.Current?.Id ?? context.TraceIdentifier;
 
+    // new ApiException() carries the framework default message ("Exception of type '...' was thrown."), which names the type
+    private static string ClientMessage(Exception exception) =>
+        string.IsNullOrWhiteSpace(exception.Message) || exception.Message.StartsWith("Exception of type '", StringComparison.Ordinal)
+            ? "An unexpected error occurred."
+            : exception.Message;
+
     internal static ApiErrorBody From(ApiException exception, HttpContext context) => new()
     {
-        Message = exception.Message,
+        Message = ClientMessage(exception),
         Code = exception.ErrorCode,
         Number = exception.ErrorNumber == 0 ? null : exception.ErrorNumber,
         TraceId = TraceId(context),
@@ -60,7 +66,7 @@ internal static class ApiErrorResponses
 #pragma warning disable CS0618 // TTGException is obsolete but still thrown by older consumer code
     internal static ApiErrorBody From(TTGException exception, HttpContext context) => new()
     {
-        Message = exception.Message,
+        Message = ClientMessage(exception),
         Code = exception.ErrorCode,
         Number = exception.ErrorNumber == 0 ? null : exception.ErrorNumber,
         TraceId = TraceId(context),
