@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 
 namespace TabTabGo.Core.Services.Tests;
 
+[Collection(LocalizerCacheCollection.Name)]
 public sealed class JsonStringLocalizerTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "ttg-loc-" + Guid.NewGuid().ToString("N"));

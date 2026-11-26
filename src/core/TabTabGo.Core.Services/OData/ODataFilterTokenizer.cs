@@ -27,6 +27,14 @@ internal static class ODataFilterTokenizer
     /// <summary>How many times <see cref="Split"/> ran on the current thread (lets tests prove that standard filters bypass it).</summary>
     internal static int Calls => _calls;
 
+    // Test-only: whitespace look-ahead steps on this thread. A blank used to look ahead over the rest of its run (quadratic); the tests
+    // assert the steps stay proportional to the input, which needs no clock.
+    [ThreadStatic]
+    private static long _lookAheadSteps;
+
+    /// <summary>How many characters the whitespace look-aheads of <see cref="Split"/> visited on the current thread.</summary>
+    internal static long LookAheadSteps => _lookAheadSteps;
+
     /// <summary>Result of <see cref="Split"/>.</summary>
     /// <param name="Filter">The filter without the custom functions; empty when nothing is left</param>
     /// <param name="CustomFilters">The custom function calls that were removed</param>
@@ -116,6 +124,7 @@ internal static class ODataFilterTokenizer
                 while (next < filter.Length && char.IsWhiteSpace(filter[next]))
                 {
                     next++;
+                    _lookAheadSteps++;
                 }
 
                 if (next < filter.Length && filter[next] == '(')
@@ -460,6 +469,7 @@ internal static class ODataFilterTokenizer
             while (i < text.Length && char.IsWhiteSpace(text[i]))
             {
                 i++;
+                _lookAheadSteps++;
             }
 
             return string.Compare(text, i, word, 0, word.Length, StringComparison.OrdinalIgnoreCase) == 0
@@ -490,6 +500,7 @@ internal static class ODataFilterTokenizer
             while (_position < text.Length && char.IsWhiteSpace(text[_position]))
             {
                 _position++;
+                _lookAheadSteps++;
             }
         }
 

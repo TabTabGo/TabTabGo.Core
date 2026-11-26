@@ -266,71 +266,80 @@ public class ODataFilterTokenizerTests
 
     private static string BlankRun(int blanks) => "xmlExist(a,'v') and A" + new string(' ', blanks) + "B";
 
-    // Quadratic work grows 16x for 4x the input, linear work 4x: the verdict line sits between them (geometric mean 8, with room).
-    private const double QuadraticThreshold = 9.0;
-
     private static readonly string SmallInput = BlankRun((ODataFilterTokenizer.MaxFilterLength - 40) / 4);
 
     private static readonly string LargeInput = BlankRun(ODataFilterTokenizer.MaxFilterLength - 40);
 
-    // Best-of-N wall time of `repeats` runs: the minimum is the run least disturbed by other processes on a busy machine.
-    private static double BestTicks(Action run, int repeats, int rounds = 9)
+    // Whitespace look-ahead steps a parse takes. Counted, not timed: a blank used to look ahead over the rest of its run (quadratic),
+    // which shows up as steps far beyond the input length; a clock on a shared CI runner cannot tell that apart reliably.
+    private static long StepsOf(string filter)
     {
-        run(); // warm up the JIT
-        var best = long.MaxValue;
-        for (var round = 0; round < rounds; round++)
-        {
-            var watch = System.Diagnostics.Stopwatch.StartNew();
-            for (var i = 0; i < repeats; i++)
-            {
-                run();
-            }
+        var before = ODataFilterTokenizer.LookAheadSteps;
+        Split(filter);
+        return ODataFilterTokenizer.LookAheadSteps - before;
+    }
 
-            best = Math.Min(best, watch.ElapsedTicks);
-        }
+    private static void AssertStepsStayProportional(Func<string, long> stepsOf)
+    {
+        var large = stepsOf(LargeInput);
+        var small = stepsOf(SmallInput);
 
-        return best;
+        Assert.True(large <= 2L * LargeInput.Length, $"{large} look-ahead steps for {LargeInput.Length} characters");
+        Assert.True((double)large / small < 6, $"4x the input took {(double)large / small:F1}x the steps (linear is about 4, quadratic about 16)");
     }
 
     [Fact]
-    public void Split_LongRunOfBlanks_IsLinear()
+    public void Split_LongRunOfBlanks_TakesLinearlyManySteps()
     {
-        // each blank used to look ahead over the rest of the run (quadratic). Compared by scaling, not by an absolute time, so a
-        // busy build machine does not fail it: 4x the input takes about 4x as long when linear and about 16x when quadratic.
-        var small = BestTicks(() => Split(SmallInput), repeats: 40);
-        var large = BestTicks(() => Split(LargeInput), repeats: 40);
-
-        var factor = large / small;
-
-        Assert.True(factor < QuadraticThreshold, $"4x the input took {factor:F1}x as long (linear is about 4, quadratic about 16)");
+        AssertStepsStayProportional(StepsOf);
     }
 
     [Fact]
-    public void ScalingVerdict_SeparatesLinearFromQuadratic_ByCountingOperations()
+    public void StepCountAssertion_FailsForAQuadraticLookAhead()
     {
-        // deterministic (no clock): the verdict line of the check above, applied to the operation counts of a reference parser that
-        // looks ahead over the rest of the run for every blank (quadratic) and one that does not (linear)
-        static long Quadratic(string text)
+        // the same assertion over a deliberately quadratic look-ahead (every blank scans the rest of its run) must fail
+        static long QuadraticSteps(string text)
         {
-            long operations = 0;
+            long steps = 0;
             for (var i = 0; i < text.Length; i++)
             {
-                for (var j = i; j < text.Length; j++)
+                if (text[i] != ' ')
                 {
-                    operations++;
+                    continue;
+                }
+
+                for (var j = i; j < text.Length && text[j] == ' '; j++)
+                {
+                    steps++;
                 }
             }
 
-            return operations;
+            return steps;
         }
 
-        static long Linear(string text) => text.Length;
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertStepsStayProportional(QuadraticSteps));
+    }
 
-        var quadratic = (double)Quadratic(LargeInput) / Quadratic(SmallInput);
-        var linear = (double)Linear(LargeInput) / Linear(SmallInput);
+    [Fact]
+    public void StepCounter_CountsWhenTheTokenizerRuns_PositiveControl()
+    {
+        var calls = ODataFilterTokenizer.Calls;
+        var steps = ODataFilterTokenizer.LookAheadSteps;
 
-        Assert.True(quadratic >= QuadraticThreshold, $"quadratic scaled {quadratic:F1}x");
-        Assert.True(linear < QuadraticThreshold, $"linear scaled {linear:F1}x");
+        Split("A eq 1 and xmlExist(a,'v')");
+
+        Assert.Equal(calls + 1, ODataFilterTokenizer.Calls);
+        Assert.True(ODataFilterTokenizer.LookAheadSteps > steps);
+    }
+
+    [Fact]
+    public void Split_LongRunOfBlanks_StillSplitsCorrectly()
+    {
+        var result = Split(LargeInput);
+
+        Assert.Single(result.CustomFilters);
+        Assert.StartsWith("A", result.Filter.TrimStart());
+        Assert.EndsWith("B", result.Filter.TrimEnd());
     }
 
     [Fact]
