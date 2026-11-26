@@ -257,7 +257,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         });
 
         var validationResult = _validateService != null ? await _validateService.Validate(entity, cancellationToken) : null;
-        if (validationResult is { IsValid: true })
+        if (validationResult is { IsValid: false })
         {
             return (
                 BadRequest(new

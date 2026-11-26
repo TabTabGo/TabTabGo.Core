@@ -262,7 +262,7 @@ public static class SetupEntityRouters
             var validationResult = validateService != null
                 ? await validateService.Validate(entity, cancellationToken)
                 : null;
-            if (validationResult is { IsValid: true })
+            if (validationResult is { IsValid: false })
             {
                 return Results.BadRequest(new
                 {

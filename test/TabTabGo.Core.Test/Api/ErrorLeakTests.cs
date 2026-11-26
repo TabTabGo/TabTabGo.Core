@@ -137,6 +137,36 @@ public class ErrorLeakTests
         Assert.Contains("Cannot delete: in use", JsonSerializer.Serialize(objectResult.Value));
     }
 
+
+    // --- D-4 / R4-15: a valid patch is saved, an invalid one is rejected ------------------------------------------------------
+
+    [Fact]
+    public async Task EntityController_Patch_ValidChange_Returns200AndSaves()
+    {
+        var service = ServiceStub.Create(null);
+        var controller = new TestController(service, new AlwaysValid());
+
+        var result = await controller.Patch(1);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(new[] { "UpdateChanges" }, ((ServiceStub)(object)service).Calls);
+    }
+
+    [Fact]
+    public async Task EntityController_Patch_InvalidChange_Returns400AndNothingIsSaved()
+    {
+        var service = ServiceStub.Create(null);
+        var controller = new TestController(service, new NeverValid());
+
+        var result = await controller.Patch(1);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        var body = JsonSerializer.Serialize(bad.Value);
+        Assert.Contains("INVALID_PATCH_REQUEST", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Name is required", body);
+        Assert.Empty(((ServiceStub)(object)service).Calls);
+    }
+
     [Fact]
     public async Task EntityController_CreateFailure_ReturnsGenericBodyWithoutLeak()
     {
@@ -152,8 +182,7 @@ public class ErrorLeakTests
     [Fact]
     public async Task EntityController_PatchFailure_ReturnsGenericBodyWithoutLeak()
     {
-        // no validator: v8 InternalPatchEntity answers 400 when a validator says the patch IS valid (inverted check, not part of this fix)
-        var controller = new TestController(ServiceStub.Create(new InvalidOperationException(LeakMarker)), withValidator: false);
+        var controller = new TestController(ServiceStub.Create(new InvalidOperationException(LeakMarker)));
 
         var result = await controller.Patch(1);
 
@@ -248,6 +277,7 @@ public class ErrorLeakTests
     [Theory]
     [InlineData(HttpStatusCode.Conflict, Microsoft.Extensions.Logging.LogLevel.Error, Microsoft.Extensions.Logging.LogLevel.Warning)]
     [InlineData(HttpStatusCode.BadRequest, Microsoft.Extensions.Logging.LogLevel.Information, Microsoft.Extensions.Logging.LogLevel.Information)]
+    [InlineData(HttpStatusCode.BadRequest, Microsoft.Extensions.Logging.LogLevel.None, Microsoft.Extensions.Logging.LogLevel.None)]
     [InlineData(HttpStatusCode.InternalServerError, Microsoft.Extensions.Logging.LogLevel.Information, Microsoft.Extensions.Logging.LogLevel.Error)]
     public async Task Middleware_LogsAtTheLevelOfTheApiException_WarningAtMostBelow500_ErrorFor500(
         HttpStatusCode status, Microsoft.Extensions.Logging.LogLevel exceptionLevel, Microsoft.Extensions.Logging.LogLevel expected)
@@ -284,9 +314,9 @@ public class ErrorLeakTests
         public DateTimeOffset UpdatedDate { get; set; }
     }
 
-    public class TestController(IBaseService<TestEntity, int> service, bool withValidator = true)
+    public class TestController(IBaseService<TestEntity, int> service, IValidationService<TestEntity, CreateRequest>? validator = null)
         : EntityControllerBase<TestEntity, int, TestEntity, CreateRequest, TestEntity>(
-            NullLogger.Instance, service, null, withValidator ? new AlwaysValid() : null)
+            NullLogger.Instance, service, null, validator ?? new AlwaysValid())
     {
         public Task<IActionResult> Delete(int id) => DeleteEntity(id);
         public Task<IActionResult> Create(CreateRequest request) => CreateEntity(request);
@@ -298,6 +328,15 @@ public class ErrorLeakTests
 
     public class CreateRequest
     {
+    }
+
+    public class NeverValid : IValidationService<TestEntity, CreateRequest>
+    {
+        public Task<ValidationResult> Validate(TestEntity entity, CancellationToken cancellationToken) =>
+            Task.FromResult(new ValidationResult { IsValid = false, Errors = new Dictionary<string, IList<string>> { ["Name"] = new List<string> { "Name is required" } } });
+
+        public Task<ValidationResult> Validate(CreateRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new ValidationResult { IsValid = false });
     }
 
     public class AlwaysValid : IValidationService<TestEntity, CreateRequest>
@@ -314,9 +353,12 @@ public class ErrorLeakTests
     /// </summary>
     public class ServiceStub : DispatchProxy
     {
-        private Exception _toThrow = null!;
+        private Exception? _toThrow;
 
-        public static IBaseService<TestEntity, int> Create(Exception toThrow)
+        /// <summary>Names of the mutating calls that reached the service.</summary>
+        public List<string> Calls { get; } = new();
+
+        public static IBaseService<TestEntity, int> Create(Exception? toThrow)
         {
             var proxy = DispatchProxy.Create<IBaseService<TestEntity, int>, ServiceStub>();
             ((ServiceStub)(object)proxy)._toThrow = toThrow;
@@ -338,10 +380,16 @@ public class ErrorLeakTests
 
             if (name is "Delete" or "Create" or "UpdateChanges" or "Update")
             {
+                Calls.Add(name);
+                if (_toThrow == null)
+                {
+                    return Task.FromResult(new TestEntity());
+                }
+
                 var inner = targetMethod.ReturnType.GetGenericArguments()[0];
                 var fromException = typeof(Task).GetMethods()
                     .Single(m => m.Name == nameof(Task.FromException) && m.IsGenericMethodDefinition);
-                return fromException.MakeGenericMethod(inner).Invoke(null, new object[] { _toThrow });
+                return fromException.MakeGenericMethod(inner).Invoke(null, new object[] { _toThrow! });
             }
 
             throw new NotSupportedException(name);

@@ -81,7 +81,7 @@ namespace TabTabGo.Core.WebApi.Middlewares
             {
                 level = LogLevel.Error;
             }
-            else if (level > LogLevel.Warning)
+            else if (level is > LogLevel.Warning and < LogLevel.None)
             {
                 level = LogLevel.Warning;
             }
