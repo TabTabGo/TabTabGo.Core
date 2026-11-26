@@ -151,13 +151,52 @@ public class ReleaseFixTests : IDisposable
     // --- RV-2: the scoped CanDelete(ids) goes through GetDeleteValidationAsync like the unscoped one --------------------------
 
     [Fact]
-    public async Task CanDelete_Scoped_RunsAnOverriddenGetDeleteValidationAsync()
+    public async Task CanDelete_Scoped_WhenGetDeleteValidationAsyncIsOverridden_FailsClosed()
     {
+        // GetDeleteValidationAsync validates by key without the scope: a key shared by two scopes would judge the other scope's rows
         _db.Seed();
         var service = new ValidationOverridingProductService(new TestUnitOfWork(_db.CreateContext()), NullLogger<BaseService<Product, int>>.Instance, refuse: 4);
 
-        Assert.False(await service.CanDelete(new[] { 2, 4 }, p => p.Tenant == "A", Ct));
-        Assert.True(await service.CanDelete(new[] { 2, 6 }, p => p.Tenant == "A", Ct));
-        Assert.True(await service.CanDelete(Array.Empty<int>(), p => p.Tenant == "A", Ct));
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.CanDelete(new[] { 2, 4 }, p => p.Tenant == "A", Ct));
+
+        Assert.Equal("DELETE_OVERRIDDEN", ex.ErrorCode);
+        Assert.Equal(HttpStatusCode.InternalServerError, ex.HttpStatusCode);
+    }
+
+    // --- RV-16: a key shared by two scopes -------------------------------------------------------------------------------------
+
+    private TestProductService KeyedByPrice(Func<Product, string?> deleteRule)
+    {
+        _db.Seed();
+        using (var context = _db.CreateContext())
+        {
+            context.Products.Find(4)!.Price = 500; // tenant A
+            context.Products.Find(3)!.Price = 500; // tenant B
+            context.SaveChanges();
+        }
+
+        return new TestProductService(new TestUnitOfWork(_db.CreateContext()), NullLogger<BaseService<Product, int>>.Instance)
+        {
+            KeyPredicateRule = code => p => p.Price == code,
+            KeyRule = p => (int)p.Price,
+            PreferServiceKeys = true,
+            DeleteRule = deleteRule,
+        };
+    }
+
+    [Fact]
+    public async Task CanDelete_Scoped_KeySharedWithAnotherTenant_JudgesOnlyTheRowInScope()
+    {
+        var service = KeyedByPrice(p => p.Tenant == "B" ? "tenant B row has children" : null);
+
+        Assert.True(await service.CanDelete(new[] { 500 }, p => p.Tenant == "A", Ct));
+    }
+
+    [Fact]
+    public async Task CanDelete_Scoped_KeySharedWithAnotherTenant_OwnRowRefused_IsFalse()
+    {
+        var service = KeyedByPrice(p => p.Tenant == "A" ? "tenant A row has children" : null);
+
+        Assert.False(await service.CanDelete(new[] { 500 }, p => p.Tenant == "A", Ct));
     }
 }

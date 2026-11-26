@@ -239,10 +239,11 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
         }
 
         EnsureNotOverridden(nameof(CanDelete), new[] { typeof(IEnumerable<TKey>), typeof(CancellationToken) });
+        // GetDeleteValidationAsync validates by key without the scope: with a key shared by two scopes it would judge the other
+        // scope's rows, so an override fails closed here (put the rule in IsValidToDelete, which both paths honour)
+        EnsureNotOverridden(nameof(GetDeleteValidationAsync), new[] { typeof(IEnumerable<TKey>), typeof(CancellationToken) });
         var entities = await LoadByKeysAsync(ids, scope, cancellationToken);
-        // the same validation the unscoped CanDelete(ids) runs, so an override of GetDeleteValidationAsync applies to both
-        var validation = await GetDeleteValidationAsync(entities.Select(GetKey).ToArray(), cancellationToken);
-        return validation.All(v => v.CanDelete);
+        return entities.All(e => IsValidToDelete(e, out _));
     }
 
     /// <inheritdoc />

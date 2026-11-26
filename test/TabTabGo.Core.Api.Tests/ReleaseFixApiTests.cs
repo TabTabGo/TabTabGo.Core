@@ -136,17 +136,48 @@ public class ReleaseFixApiTests
     // --- RV-2: the controller's list delete honours an overridden validation ------------------------------------------------
 
     [Fact]
-    public async Task Controller_DeleteMany_WithFixCriteria_AndAnOverriddenValidation_Is412AndDeletesNothing()
+    public async Task Controller_DeleteMany_WithFixCriteria_AndAnOverriddenValidation_Is500DeleteOverriddenAndDeletesNothing()
     {
         await using var app = await TestApp.StartAsync("controller", services: s => s.AddScoped<IBaseService<Product, int>>(sp =>
             new ValidationOverridingProductService(sp.GetRequiredService<IUnitOfWork>(), sp.GetRequiredService<ILogger<BaseService<Product, int>>>(), refuse: 4)));
 
         var response = await app.Client.SendAsync(app.Request(HttpMethod.Post, "/api/products/delete",
             new StringContent("[2,4]", Encoding.UTF8, "application/json"), tenant: "A"), Ct);
+        var body = await response.Content.ReadAsStringAsync(Ct);
 
-        Assert.Equal(HttpStatusCode.PreconditionFailed, response.StatusCode);
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Contains("DELETE_OVERRIDDEN", body);
         await using var fresh = app.Db.CreateContext();
         Assert.Equal(25, fresh.Products.Count(p => p.IsEnabled));
+    }
+
+    // --- RV-16: a key shared by two tenants -----------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Controller_BulkDelete_CodeInTwoTenants_OtherTenantsRefusedRowDoesNotBlock()
+    {
+        await using var app = await TestApp.StartAsync("controller", services: s => s.AddScoped<IBaseService<Product, int>>(sp =>
+            new TestProductService(sp.GetRequiredService<IUnitOfWork>(), sp.GetRequiredService<ILogger<BaseService<Product, int>>>())
+            {
+                KeyPredicateRule = code => p => p.Price == code,
+                KeyRule = p => (int)p.Price,
+                PreferServiceKeys = true,
+                DeleteRule = p => p.Tenant == "B" ? "tenant B row has children" : null,
+            }));
+        await using (var context = app.Db.CreateContext())
+        {
+            context.Products.Find(4)!.Price = 500; // tenant A
+            context.Products.Find(3)!.Price = 500; // tenant B
+            await context.SaveChangesAsync(Ct);
+        }
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Post, "/api/products/delete",
+            new StringContent("[500]", Encoding.UTF8, "application/json"), tenant: "A"), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        Assert.False(fresh.Products.Find(4)!.IsEnabled);
+        Assert.True(fresh.Products.Find(3)!.IsEnabled);
     }
 
     // --- RV-8: patch-by-json maps through the mapper like the other patch ---------------------------------------------------
