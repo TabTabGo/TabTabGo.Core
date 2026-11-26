@@ -1,4 +1,8 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using TabTabGo.Core.Exceptions;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -15,10 +19,23 @@ namespace TabTabGo.Core.WebApi.Middlewares
     public class ErrorHandlingMiddleware
     {
         private readonly RequestDelegate next;
+        private readonly ILogger logger;
 
-        public ErrorHandlingMiddleware(RequestDelegate next)
+        /// <summary>
+        /// Creates the middleware without a logger (unhandled exceptions are then not logged).
+        /// </summary>
+        public ErrorHandlingMiddleware(RequestDelegate next) : this(next, NullLogger<ErrorHandlingMiddleware>.Instance)
+        {
+        }
+
+        /// <summary>
+        /// Creates the middleware; the full exception is logged server-side.
+        /// </summary>
+        [ActivatorUtilitiesConstructor]
+        public ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorHandlingMiddleware> logger)
         {
             this.next = next;
+            this.logger = logger;
         }
 
         public async Task Invoke(HttpContext context /* other scoped dependencies */)
@@ -33,21 +50,29 @@ namespace TabTabGo.Core.WebApi.Middlewares
             }
         }
 
-        private static Task HandleExceptionAsync(HttpContext context, Exception exception)
+        private Task HandleExceptionAsync(HttpContext context, Exception exception)
         {
-            var httpCode = HttpStatusCode.InternalServerError; // 500 if unexpected
-            string errorCode = null;
-            int errorNumber;
-            // if (exception is TabTabGo.Core.ApiException)
-            // {
-            //     httpCode = (exception as ApiException).HttpStatusCode;
-            //     errorNumber = (exception as ApiException).ErrorNumber;
-            //     errorCode = (exception as ApiException).ErrorCode;
-            // }
-            //else if (exception is NotFoundException) code = HttpStatusCode.Unauthorized;
-            //else if (exception is MyException) code = HttpStatusCode.BadRequest;
+            logger.LogError(exception, "Unhandled exception while processing {Method} {Path}",
+                context.Request.Method, context.Request.Path);
 
-            var result = JsonConvert.SerializeObject(new { number = errorCode, code = errorCode, message = exception.Message , exception = exception,  });
+            // Only ApiException messages are written for clients; anything else gets the generic body.
+            // Never send exception.Message, stack, type name or the exception object itself.
+            var httpCode = HttpStatusCode.InternalServerError;
+            ClientError body;
+            if (exception is ApiException apiException)
+            {
+                httpCode = apiException.HttpStatusCode;
+                body = new ClientError(apiException.ErrorNumber, apiException.ErrorCode, apiException.Message);
+            }
+            else
+            {
+                body = ClientError.Unexpected();
+            }
+
+            var result = JsonConvert.SerializeObject(new
+            {
+                number = body.Number, code = body.Code, message = body.Message
+            });
             context.Response.ContentType = "application/json";
             context.Response.StatusCode = (int)httpCode;
             return context.Response.WriteAsync(result);

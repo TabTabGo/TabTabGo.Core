@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using TabTabGo.Core.Entities;
 using TabTabGo.Core.Enums;
 using TabTabGo.Core.Exceptions;
+using TabTabGo.Core.WebApi.Middlewares;
 using TabTabGo.Core.Extensions;
 using TabTabGo.Core.Services;
 using TabTabGo.Core.ViewModels;
@@ -215,11 +216,9 @@ public static class SetupEntityRouters
                     logger.LogError(e, "Failed to create {EntityName} : {@EntityRequest}", entityName,
                         @requestedEntity);
                     return Results.Json(
-                        new
-                        {
-                            Message = $"Failed to create {entityName}.", Code = $"Create_{entityName}_Failed".ToUpper(),
-                            exception = e
-                        }, statusCode: (int)HttpStatusCode.InternalServerError);
+                        ClientError.Unexpected(
+                            $"Create_{entityName}_Failed".ToUpper(), $"Failed to create {entityName}."),
+                        statusCode: (int)HttpStatusCode.InternalServerError);
                 }
             });
 
@@ -289,7 +288,7 @@ public static class SetupEntityRouters
             {
                 logger.LogError(e, "Failed to update {EntityName}, changes {@Changes}", entityName, changes);
                 return
-                    Results.Json(new {  e.Message, Code = "Update_Entity_Failed".ToUpper(), exception = e },
+                    Results.Json(ClientError.Unexpected("Update_Entity_Failed".ToUpper()),
                         statusCode: (int)HttpStatusCode.InternalServerError);
             }
         });
@@ -341,7 +340,7 @@ public static class SetupEntityRouters
                 {
                     logger.LogError(e, "Failed to delete {EntityName} with Id {Id}", entityName, id);
                     return Results.Json(
-                        new { e.Message, Code = "Delete_Entity_Failed".ToUpper(), exception = e },
+                        ClientError.Unexpected("Delete_Entity_Failed".ToUpper()),
                         statusCode: (int)HttpStatusCode.InternalServerError);
                 }
             });
