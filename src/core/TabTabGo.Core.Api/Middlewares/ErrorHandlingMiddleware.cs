@@ -1,7 +1,9 @@
-﻿using System.Net;
+using System.Net;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TabTabGo.Core.Api.Errors;
 using TabTabGo.Core.Exceptions;
@@ -34,10 +36,26 @@ public class ErrorHandlingMiddleware
     private readonly ILogger<ErrorHandlingMiddleware> _logger;
     private readonly ErrorHandlingMiddlewareOptions _options;
 
+    /// <summary>Creates the middleware with default options and no logger (kept for compatibility with 8.x).</summary>
+    /// <param name="next">The next delegate</param>
+    public ErrorHandlingMiddleware(RequestDelegate next)
+        : this(next, NullLogger<ErrorHandlingMiddleware>.Instance, Options.Create(new ErrorHandlingMiddlewareOptions()))
+    {
+    }
+
+    /// <summary>Creates the middleware with default options (kept for compatibility with 8.x).</summary>
+    /// <param name="next">The next delegate</param>
+    /// <param name="logger">Logger</param>
+    public ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorHandlingMiddleware> logger)
+        : this(next, logger, Options.Create(new ErrorHandlingMiddlewareOptions()))
+    {
+    }
+
     /// <summary>Creates the middleware.</summary>
     /// <param name="next">The next delegate</param>
     /// <param name="logger">Logger</param>
     /// <param name="options">Options</param>
+    [ActivatorUtilitiesConstructor]
     public ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorHandlingMiddleware> logger,
         IOptions<ErrorHandlingMiddlewareOptions> options)
     {
