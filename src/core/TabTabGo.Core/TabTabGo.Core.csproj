@@ -4,7 +4,6 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <PackageVersion>$(VersionSuffix)</PackageVersion>
     <Title>TabTabGo Core library</Title>
     <Authors>TabTabGo</Authors>
     <Description>Core functionalties and interfaces </Description>

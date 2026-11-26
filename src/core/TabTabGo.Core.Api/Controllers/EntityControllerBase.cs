@@ -9,6 +9,7 @@ using TabTabGo.Core.Exceptions;
 using TabTabGo.Core.Extensions;
 using TabTabGo.Core.Services;
 using TabTabGo.Core.ViewModels;
+using TabTabGo.Core.WebApi.Middlewares;
 
 namespace TabTabGo.Core.Api.Controllers;
 
@@ -95,7 +96,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         }
         catch (ApiException ex)
         {
-            return StatusCode((int)ex.HttpStatusCode, new { Message = ex.Message, Code = ex.ErrorCode, });
+            return StatusCode((int)ex.HttpStatusCode, new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, });
         }
     }
 
@@ -200,16 +201,13 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         catch (ApiException ex)
         {
             _logger.LogError(ex, "Failed to create {EntityName} : {@EntityRequest}", EntityName, @requestedEntity);
-            return StatusCode((int)ex.HttpStatusCode, new { Message = ex.Message, Code = ex.ErrorCode, });
+            return StatusCode((int)ex.HttpStatusCode, new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, });
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Failed to create {EntityName} : {@EntityRequest}", EntityName, @requestedEntity);
-            return StatusCode((int)HttpStatusCode.InternalServerError, new
-            {
-                Message = $"Failed to create {EntityName}.", Code = $"Create_{EntityName}_Failed".ToUpper(),
-                exception = e
-            });
+            return StatusCode((int)HttpStatusCode.InternalServerError, ClientError.Unexpected(
+                $"Create_{EntityName}_Failed".ToUpper(), $"Failed to create {EntityName}."));
         }
     }
 
@@ -259,7 +257,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         });
 
         var validationResult = _validateService != null ? await _validateService.Validate(entity, cancellationToken) : null;
-        if (validationResult is { IsValid: true })
+        if (validationResult is { IsValid: false })
         {
             return (
                 BadRequest(new
@@ -279,13 +277,13 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         catch (ApiException ex)
         {
             _logger.LogError(ex, "Failed to update {EntityName}", EntityName);
-            return (StatusCode((int)ex.HttpStatusCode, new { Message = ex.Message, Code = ex.ErrorCode, }), null);
+            return (StatusCode((int)ex.HttpStatusCode, new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, }), null);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Failed to create {EntityName}", EntityName);
             return (
-                StatusCode(500, new { Message = e.Message, Code = "Update_Entity_Failed".ToUpper(), exception = e }),
+                StatusCode(500, ClientError.Unexpected("Update_Entity_Failed".ToUpper())),
                 null);
         }
     }
@@ -365,12 +363,12 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         catch (ApiException ex)
         {
             _logger.LogError(ex, "Failed to update {EntityName} with id : {Id}", EntityName, id);
-            return StatusCode((int)ex.HttpStatusCode, new { Message = ex.Message, Code = ex.ErrorCode, });
+            return StatusCode((int)ex.HttpStatusCode, new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, });
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Failed to update {EntityName} with id : {Id}", EntityName, id);
-            return StatusCode(500, new { Message = e.Message, Code = "Update_Entity_Failed".ToUpper(), exception = e });
+            return StatusCode(500, ClientError.Unexpected("Update_Entity_Failed".ToUpper()));
         }
     }
 
@@ -406,13 +404,13 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
             catch (ApiException ex)
             {
                 _logger.LogError(ex, "Failed to delete {EntityName}", EntityName);
-                return StatusCode((int)ex.HttpStatusCode, new { Message = ex.Message, Code = ex.ErrorCode, });
+                return StatusCode((int)ex.HttpStatusCode, new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, });
             }
             catch (Exception e)
             {
                 _logger.LogError(e, "Failed to delete {EntityName}", EntityName);
                 return StatusCode(500,
-                    new { Message = e.Message, Code = "Delete_Entity_Failed".ToUpper(), exception = e });
+                    ClientError.Unexpected("Delete_Entity_Failed".ToUpper()));
             }
         }
 
@@ -442,13 +440,13 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
         catch (ApiException ex)
         {
             _logger.LogError(ex, "Failed to delete list of {EntityName}", EntityName);
-            return StatusCode((int)ex.HttpStatusCode, new { Message = ex.Message, Code = ex.ErrorCode, });
+            return StatusCode((int)ex.HttpStatusCode, new { Message = ClientError.MessageOf(ex), Code = ex.ErrorCode, });
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Failed to delete list of {EntityName}, Ids {@Ids}", EntityName, ids);
             return StatusCode(500,
-                new { Message = e.Message, Code = "Delete_Entity_Failed".ToUpper(), exception = e });
+                ClientError.Unexpected("Delete_Entity_Failed".ToUpper()));
         }
     }
 }

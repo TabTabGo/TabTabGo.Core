@@ -36,6 +36,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "IO", "IO", "{9BD0EFD7-C6C1-
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TabTabGo.IO.Utilities", "src\io\TabTabGo.IO.Utilities\TabTabGo.IO.Utilities.csproj", "{D2367460-A241-450C-A92D-BA13D430614B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TabTabGo.Core.Infrastructure", "src\core\TabTabGo.Core.Infrastructure\TabTabGo.Core.Infrastructure.csproj", "{205A5D0C-FA96-4617-AAD5-5634947ED44C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -74,6 +76,10 @@ Global
 		{D2367460-A241-450C-A92D-BA13D430614B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D2367460-A241-450C-A92D-BA13D430614B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D2367460-A241-450C-A92D-BA13D430614B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{205A5D0C-FA96-4617-AAD5-5634947ED44C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{205A5D0C-FA96-4617-AAD5-5634947ED44C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{205A5D0C-FA96-4617-AAD5-5634947ED44C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{205A5D0C-FA96-4617-AAD5-5634947ED44C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -90,6 +96,7 @@ Global
 		{18C5BB5B-7E30-4BBD-BFC8-B948DA374262} = {263CC5A6-A9BD-474E-9E66-55BCEDC45CD4}
 		{9BD0EFD7-C6C1-4AE4-883C-EF90085D5673} = {27127C42-173C-4FDD-83DB-03AF906B1211}
 		{D2367460-A241-450C-A92D-BA13D430614B} = {9BD0EFD7-C6C1-4AE4-883C-EF90085D5673}
+		{205A5D0C-FA96-4617-AAD5-5634947ED44C} = {637C627C-1D22-4C7D-AD92-EB8A6F7F3DFE}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {12AF5B21-1918-4609-80E9-864CE467290D}

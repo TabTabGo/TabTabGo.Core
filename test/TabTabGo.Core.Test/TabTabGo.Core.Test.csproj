@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
@@ -19,6 +20,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\core\TabTabGo.Core.Api\TabTabGo.Core.Api.csproj" />
+    <ProjectReference Include="..\..\src\core\TabTabGo.Core.Infrastructure\TabTabGo.Core.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\core\TabTabGo.Core.Country\TabTabGo.Core.Country.csproj" />
     <ProjectReference Include="..\..\src\core\TabTabGo.Core.Services\TabTabGo.Core.Services.csproj" />
     <ProjectReference Include="..\..\src\core\TabTabGo.Core\TabTabGo.Core.csproj" />
