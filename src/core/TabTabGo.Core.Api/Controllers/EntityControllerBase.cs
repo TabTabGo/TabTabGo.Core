@@ -387,7 +387,7 @@ public class EntityControllerBase<TEntity, TKey, TViewModel, TCreateRequest, TUp
             // the returned entity, not the patched one: after a retry the service works on a fresh load
             var updated = await _currentService.UpdateChanges(id, entity, GetFixCriteria, cancellationToken);
 
-            return Ok(updated);
+            return _mapper == null ? Ok(updated) : Ok(_mapper.MapToViewModel(updated));
         }
         catch (ApiException ex)
         {

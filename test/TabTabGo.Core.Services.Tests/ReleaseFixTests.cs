@@ -147,4 +147,17 @@ public class ReleaseFixTests : IDisposable
         Assert.DoesNotContain(nameof(OverridingProductService), ex.Message);
         Assert.Contains("UpdateChangesCore", ex.Message);
     }
+
+    // --- RV-2: the scoped CanDelete(ids) goes through GetDeleteValidationAsync like the unscoped one --------------------------
+
+    [Fact]
+    public async Task CanDelete_Scoped_RunsAnOverriddenGetDeleteValidationAsync()
+    {
+        _db.Seed();
+        var service = new ValidationOverridingProductService(new TestUnitOfWork(_db.CreateContext()), NullLogger<BaseService<Product, int>>.Instance, refuse: 4);
+
+        Assert.False(await service.CanDelete(new[] { 2, 4 }, p => p.Tenant == "A", Ct));
+        Assert.True(await service.CanDelete(new[] { 2, 6 }, p => p.Tenant == "A", Ct));
+        Assert.True(await service.CanDelete(Array.Empty<int>(), p => p.Tenant == "A", Ct));
+    }
 }

@@ -108,7 +108,9 @@ public class ErrorHandlingMiddleware
 #pragma warning disable CS0618 // TTGException is obsolete but still thrown by older consumer code
         if (exception is TTGException ttgException)
         {
-            return (ttgException.HttpStatusCode, ApiErrorResponses.From(ttgException, context));
+            // new TTGException("message") leaves the status at 0; 8.x answered 500 for it
+            var status = ttgException.HttpStatusCode == 0 ? HttpStatusCode.InternalServerError : ttgException.HttpStatusCode;
+            return (status, ApiErrorResponses.From(ttgException, context));
         }
 #pragma warning restore CS0618
 
