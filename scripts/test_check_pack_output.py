@@ -12,17 +12,17 @@ import check_pack_output as cpo  # noqa: E402
 IDS = ["TabTabGo.Core", "TabTabGo.Core.Services"]
 
 
-def nuspec(pid, version, deps):
+def nuspec(pid, version, deps, license_xml=""):
     items = "".join(f'<dependency id="{i}" version="{v}" />' for i, v in deps)
     return (f'<?xml version="1.0"?><package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd"><metadata>'
-            f'<id>{pid}</id><version>{version}</version><dependencies><group targetFramework="net8.0">{items}</group></dependencies>'
+            f'<id>{pid}</id><version>{version}</version>{license_xml}<dependencies><group targetFramework="net8.0">{items}</group></dependencies>'
             f'</metadata></package>')
 
 
-def write_pkg(directory, pid, version, deps=(), tfm="net8.0", readme=True, symbols=True, nupkg_version=None):
+def write_pkg(directory, pid, version, deps=(), tfm="net8.0", readme=True, symbols=True, nupkg_version=None, license_xml=""):
     nv = nupkg_version or version
     with zipfile.ZipFile(directory / f"{pid}.{version}.nupkg", "w") as z:
-        z.writestr(f"{pid}.nuspec", nuspec(pid, nv, deps))
+        z.writestr(f"{pid}.nuspec", nuspec(pid, nv, deps, license_xml))
         z.writestr(f"lib/{tfm}/{pid}.dll", b"x")
         if readme:
             z.writestr("README.md", "r")
@@ -101,6 +101,28 @@ class InspectTests(unittest.TestCase):
             args = [d, "--version", "8.0.1", "--ids", ",".join(IDS), "--tfm", "net8.0", "--require-readme"]
             self.assertEqual(0, cpo.main(args))
             self.assertEqual(1, cpo.main([d, "--version", "8.0.2", "--ids", ",".join(IDS)]))
+
+
+class LicenseTests(unittest.TestCase):
+    def run_license(self, license_xml):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = pathlib.Path(tmp)
+            write_pkg(d, "TabTabGo.Core", "8.0.1", license_xml=license_xml)
+            return cpo.inspect(d, "8.0.1", ["TabTabGo.Core"], require_license=True)[0]
+
+    def test_licence_expression_is_accepted(self):
+        self.assertEqual(self.run_license('<license type="expression">MIT</license>'), [])
+
+    def test_missing_or_non_expression_licence_is_an_error(self):
+        self.assertTrue(any("licence" in e for e in self.run_license("")))
+        self.assertTrue(any("licence" in e for e in self.run_license('<license type="file">LICENSE</license>')))
+        self.assertTrue(any("licence" in e for e in self.run_license('<license type="expression"> </license>')))
+
+    def test_not_required_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = pathlib.Path(tmp)
+            write_pkg(d, "TabTabGo.Core", "8.0.1")
+            self.assertEqual(cpo.inspect(d, "8.0.1", ["TabTabGo.Core"])[0], [])
 
 
 class ListIdsTests(unittest.TestCase):

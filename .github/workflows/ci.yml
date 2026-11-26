@@ -68,4 +68,4 @@ jobs:
         run: |
           set -euo pipefail
           version="$(python3 scripts/release_verify.py version)"
-          python3 scripts/check_pack_output.py out --version "$version" --ids-file scripts/expected-packages.txt --tfm net11.0 --require-readme
+          python3 scripts/check_pack_output.py out --version "$version" --ids-file scripts/expected-packages.txt --tfm net11.0 --require-readme --require-license
