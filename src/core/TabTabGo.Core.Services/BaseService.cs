@@ -240,7 +240,9 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
 
         EnsureNotOverridden(nameof(CanDelete), new[] { typeof(IEnumerable<TKey>), typeof(CancellationToken) });
         var entities = await LoadByKeysAsync(ids, scope, cancellationToken);
-        return entities.All(e => IsValidToDelete(e, out _));
+        // the same validation the unscoped CanDelete(ids) runs, so an override of GetDeleteValidationAsync applies to both
+        var validation = await GetDeleteValidationAsync(entities.Select(GetKey).ToArray(), cancellationToken);
+        return validation.All(v => v.CanDelete);
     }
 
     /// <inheritdoc />
@@ -500,7 +502,7 @@ public abstract class BaseService<TEntity, TKey> : BaseReadService<TEntity, TKey
             // never report done what was not done: the first attempt failed and was rolled back, and this change (owned or child
             // rows, collections, shadow properties) cannot be rebuilt from the property values alone
             throw new ApiException(
-                "A transient failure interrupted the update and it was NOT applied. Send the request again.",
+                "A transient failure interrupted the update and it could not be confirmed. Reload the entity before sending the request again.",
                 statusCode: HttpStatusCode.ServiceUnavailable, code: "RETRY_NOT_REPLAYABLE");
         }
 

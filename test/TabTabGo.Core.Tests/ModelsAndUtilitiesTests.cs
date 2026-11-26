@@ -111,6 +111,16 @@ public class ModelsAndUtilitiesTests
     }
 
     [Fact]
+    public void ErrorResponse_FromAnApiExceptionWithTheFrameworkDefaultMessage_SendsTheGenericMessage()
+    {
+        var response = new ErrorResponse(new ApiException());
+
+        Assert.Equal("An unexpected error occurred.", response.Message);
+        Assert.DoesNotContain("ApiException", response.Message);
+        Assert.Equal("kept", new ErrorResponse(new ApiException("kept")).Message);
+    }
+
+    [Fact]
     public void ErrorResponse_Constructors_OptionalValuesAreOmitted()
     {
         var json = JsonSerializer.Serialize(new ErrorResponse("m", null), SerializerEngine.JsonSerializationSettings);

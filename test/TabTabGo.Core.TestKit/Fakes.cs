@@ -323,6 +323,13 @@ public class OverridingDeleteProductService(IUnitOfWork unitOfWork, ILogger<Base
     }
 }
 
+/// <summary>A product service that overrides <c>GetDeleteValidationAsync</c> (the unscoped CanDelete(ids) goes through it) and refuses one key.</summary>
+public class ValidationOverridingProductService(IUnitOfWork unitOfWork, ILogger<BaseService<Product, int>> logger, int refuse = 2) : TestProductService(unitOfWork, logger)
+{
+    public override Task<IReadOnlyList<(int Id, bool CanDelete, string Error)>> GetDeleteValidationAsync(IEnumerable<int> ids, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<(int Id, bool CanDelete, string Error)>>(ids.Select(i => (i, i != refuse, i == refuse ? "refused by the override" : string.Empty)).ToList());
+}
+
 /// <summary>Unit of work that implements only the 8.x members (the default interface methods fill the rest).</summary>
 public class MinimalUnitOfWork : IUnitOfWork
 {

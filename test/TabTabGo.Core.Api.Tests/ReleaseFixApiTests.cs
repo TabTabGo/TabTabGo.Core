@@ -112,4 +112,56 @@ public class ReleaseFixApiTests
         Assert.DoesNotContain("ApiException", body);
         Assert.Contains("An unexpected error occurred.", body);
     }
+
+    // --- RV-1: a message-only TTGException answers 500, not status 0 ----------------------------------------------------------
+
+    [Fact]
+    public async Task Middleware_TtgExceptionWithMessageOnly_Answers500WithItsMessage()
+    {
+#pragma warning disable CS0618
+        var middleware = new ErrorHandlingMiddleware(_ => throw new TabTabGo.Core.Exceptions.TTGException("Order is locked"));
+#pragma warning restore CS0618
+        var context = new DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+
+        await middleware.Invoke(context);
+
+        context.Response.Body.Position = 0;
+        var body = await new StreamReader(context.Response.Body).ReadToEndAsync(Ct);
+        Assert.Equal(500, context.Response.StatusCode);
+        Assert.Contains("Order is locked", body);
+        Assert.DoesNotContain("TTGException", body);
+    }
+
+    // --- RV-2: the controller's list delete honours an overridden validation ------------------------------------------------
+
+    [Fact]
+    public async Task Controller_DeleteMany_WithFixCriteria_AndAnOverriddenValidation_Is412AndDeletesNothing()
+    {
+        await using var app = await TestApp.StartAsync("controller", services: s => s.AddScoped<IBaseService<Product, int>>(sp =>
+            new ValidationOverridingProductService(sp.GetRequiredService<IUnitOfWork>(), sp.GetRequiredService<ILogger<BaseService<Product, int>>>(), refuse: 4)));
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Post, "/api/products/delete",
+            new StringContent("[2,4]", Encoding.UTF8, "application/json"), tenant: "A"), Ct);
+
+        Assert.Equal(HttpStatusCode.PreconditionFailed, response.StatusCode);
+        await using var fresh = app.Db.CreateContext();
+        Assert.Equal(25, fresh.Products.Count(p => p.IsEnabled));
+    }
+
+    // --- RV-8: patch-by-json maps through the mapper like the other patch ---------------------------------------------------
+
+    [Fact]
+    public async Task Controller_PatchByJson_WithAMapper_AnswersTheViewModel()
+    {
+        await using var app = await TestApp.StartAsync("controller", withMapper: true);
+
+        var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/json/2",
+            new StringContent("{\"name\":\"patched\"}", Encoding.UTF8, "application/json")), Ct);
+        var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement;
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("patched", json.GetProperty("name").GetString());
+        Assert.False(json.TryGetProperty("tenant", out _)); // the entity has it, the view model does not
+    }
 }

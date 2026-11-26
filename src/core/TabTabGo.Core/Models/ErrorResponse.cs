@@ -31,8 +31,14 @@ public class ErrorResponse(string message, string? code, int? errorNumber = null
     public Exception? Exception { get; set; }
 
     /// <summary>Creates an error response from an <see cref="ApiException"/> (message, code and number only).</summary>
-    public ErrorResponse(ApiException exception) : this(exception.Message, exception.ErrorCode, exception.ErrorNumber)
+    public ErrorResponse(ApiException exception) : this(ClientMessage(exception), exception.ErrorCode, exception.ErrorNumber)
     {
     }
+
+    // new ApiException() carries the framework default message ("Exception of type '...' was thrown."), which names the type
+    private static string ClientMessage(Exception exception) =>
+        string.IsNullOrWhiteSpace(exception.Message) || exception.Message.StartsWith("Exception of type '", StringComparison.Ordinal)
+            ? "An unexpected error occurred."
+            : exception.Message;
 }
 #pragma warning restore CS9113

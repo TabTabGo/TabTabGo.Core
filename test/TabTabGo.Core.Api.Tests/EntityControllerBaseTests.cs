@@ -642,7 +642,7 @@ public class EntityControllerBaseTests
     [Fact]
     public async Task PatchJson_MergesOnlyProvidedProperties()
     {
-        await using var app = await Start();
+        await using var app = await Start(withMapper: false); // the entity itself is the answer; with a mapper it is the view model (RV-8)
 
         var response = await app.Client.SendAsync(app.Request(HttpMethod.Patch, "/api/products/json/5", Json("{\"description\":\"merged\"}")), Ct);
         var body = await Body(response);
